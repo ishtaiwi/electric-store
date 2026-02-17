@@ -1,0 +1,802 @@
+{
+  "database": {
+    "name": "d.db",
+    "type": "SQLite",
+    "version": "3.x",
+    "description": "Electrical Store Management System Database",
+    "description_ar": "قاعدة بيانات نظام إدارة المتجر الكهربائي",
+    "pragma_settings": {
+      "journal_mode": "WAL",
+      "synchronous": "NORMAL",
+      "cache_size": 10000,
+      "temp_store": "MEMORY"
+    }
+  },
+  "tables": {
+    "products": {
+      "description": "Products inventory table",
+      "description_ar": "جدول المنتجات",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "autoincrement": true,
+          "description": "Unique product identifier"
+        },
+        "name": {
+          "type": "TEXT",
+          "nullable": false,
+          "description": "Product name"
+        },
+        "barcode": {
+          "type": "TEXT",
+          "unique": true,
+          "description": "Product barcode (EAN-13 format)"
+        },
+        "quantity": {
+          "type": "INTEGER",
+          "nullable": false,
+          "description": "Available quantity in stock"
+        },
+        "price": {
+          "type": "REAL",
+          "nullable": false,
+          "description": "Selling price"
+        },
+        "cost_price": {
+          "type": "REAL",
+          "nullable": false,
+          "default": 0,
+          "description": "Cost/purchase price"
+        },
+        "category": {
+          "type": "TEXT",
+          "description": "Product category"
+        },
+        "supplier": {
+          "type": "TEXT",
+          "description": "Supplier name"
+        },
+        "min_stock": {
+          "type": "INTEGER",
+          "default": 5,
+          "description": "Minimum stock level for alerts"
+        },
+        "last_updated": {
+          "type": "TIMESTAMP",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "Last update timestamp"
+        }
+      },
+      "indexes": [
+        "idx_products_barcode",
+        "idx_products_name"
+      ]
+    },
+    "sales": {
+      "description": "Sales transactions table",
+      "description_ar": "جدول المبيعات",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "autoincrement": true,
+          "description": "Unique sale identifier"
+        },
+        "product_id": {
+          "type": "INTEGER",
+          "foreign_key": "products(id)",
+          "description": "Reference to product"
+        },
+        "barcode": {
+          "type": "TEXT",
+          "description": "Product barcode at time of sale"
+        },
+        "product_name": {
+          "type": "TEXT",
+          "description": "Product name at time of sale"
+        },
+        "quantity": {
+          "type": "INTEGER",
+          "nullable": false,
+          "description": "Quantity sold"
+        },
+        "cost_price": {
+          "type": "REAL",
+          "nullable": false,
+          "default": 0,
+          "description": "Cost price at time of sale"
+        },
+        "sale_price": {
+          "type": "REAL",
+          "nullable": false,
+          "description": "Unit selling price"
+        },
+        "total_amount": {
+          "type": "REAL",
+          "nullable": false,
+          "description": "Total amount before discount"
+        },
+        "profit": {
+          "type": "REAL",
+          "nullable": false,
+          "default": 0,
+          "description": "Profit from this sale"
+        },
+        "sale_date": {
+          "type": "TIMESTAMP",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "Date and time of sale"
+        },
+        "customer_id": {
+          "type": "INTEGER",
+          "foreign_key": "customers(id)",
+          "description": "Reference to customer"
+        },
+        "discount_amount": {
+          "type": "REAL",
+          "default": 0,
+          "description": "Discount applied"
+        },
+        "final_amount": {
+          "type": "REAL",
+          "nullable": false,
+          "description": "Final amount after discount"
+        },
+        "invoice_id": {
+          "type": "INTEGER",
+          "foreign_key": "invoices(id)",
+          "description": "Reference to invoice"
+        }
+      },
+      "indexes": [
+        "idx_sales_date",
+        "idx_sales_barcode"
+      ]
+    },
+    "customers": {
+      "description": "Customers information table",
+      "description_ar": "جدول العملاء",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "autoincrement": true,
+          "description": "Unique customer identifier"
+        },
+        "name": {
+          "type": "TEXT",
+          "nullable": false,
+          "description": "Customer name"
+        },
+        "phone": {
+          "type": "TEXT",
+          "description": "Phone number"
+        },
+        "email": {
+          "type": "TEXT",
+          "description": "Email address"
+        },
+        "address": {
+          "type": "TEXT",
+          "description": "Customer address"
+        },
+        "created_date": {
+          "type": "TIMESTAMP",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "Account creation date"
+        }
+      },
+      "indexes": [
+        "idx_customers_phone"
+      ]
+    },
+    "users": {
+      "description": "System users and authentication",
+      "description_ar": "جدول المستخدمين",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "autoincrement": true,
+          "description": "Unique user identifier"
+        },
+        "username": {
+          "type": "TEXT",
+          "unique": true,
+          "nullable": false,
+          "description": "Login username"
+        },
+        "password": {
+          "type": "TEXT",
+          "nullable": false,
+          "description": "User password (plain text - should be hashed)"
+        },
+        "role": {
+          "type": "TEXT",
+          "nullable": false,
+          "default": "cashier",
+          "description": "User role",
+          "enum": ["admin", "manager", "cashier"]
+        },
+        "full_name": {
+          "type": "TEXT",
+          "description": "User's full name"
+        },
+        "created_date": {
+          "type": "TIMESTAMP",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "Account creation date"
+        }
+      },
+      "indexes": [
+        "idx_users_username"
+      ],
+      "default_users": [
+        {
+          "username": "admin",
+          "password": "admin123",
+          "role": "admin",
+          "full_name": "مدير النظام"
+        },
+        {
+          "username": "manager",
+          "password": "manager123",
+          "role": "manager",
+          "full_name": "مدير المتجر"
+        },
+        {
+          "username": "cashier1",
+          "password": "cashier123",
+          "role": "cashier",
+          "full_name": "كاشير 1"
+        },
+        {
+          "username": "cashier2",
+          "password": "cashier456",
+          "role": "cashier",
+          "full_name": "كاشير 2"
+        }
+      ]
+    },
+    "discounts": {
+      "description": "Discounts and promotions",
+      "description_ar": "جدول الخصومات والعروض",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "autoincrement": true,
+          "description": "Unique discount identifier"
+        },
+        "name": {
+          "type": "TEXT",
+          "nullable": false,
+          "description": "Discount name"
+        },
+        "discount_type": {
+          "type": "TEXT",
+          "nullable": false,
+          "description": "Type of discount",
+          "enum": ["percentage", "fixed"]
+        },
+        "discount_value": {
+          "type": "REAL",
+          "nullable": false,
+          "description": "Discount value (percentage or fixed amount)"
+        },
+        "min_amount": {
+          "type": "REAL",
+          "default": 0,
+          "description": "Minimum purchase amount to apply discount"
+        },
+        "valid_from": {
+          "type": "TIMESTAMP",
+          "description": "Start date of discount validity"
+        },
+        "valid_to": {
+          "type": "TIMESTAMP",
+          "description": "End date of discount validity"
+        },
+        "is_active": {
+          "type": "BOOLEAN",
+          "default": 1,
+          "description": "Whether discount is currently active"
+        },
+        "created_date": {
+          "type": "TIMESTAMP",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "Creation date"
+        }
+      }
+    },
+    "inventory_adjustments": {
+      "description": "Stock adjustments and movements",
+      "description_ar": "جدول تعديلات المخزون",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "autoincrement": true,
+          "description": "Unique adjustment identifier"
+        },
+        "product_id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "foreign_key": "products(id)",
+          "description": "Reference to product"
+        },
+        "adjustment_type": {
+          "type": "TEXT",
+          "nullable": false,
+          "description": "Type of adjustment",
+          "enum": ["stock_in", "stock_out", "return"]
+        },
+        "quantity": {
+          "type": "INTEGER",
+          "nullable": false,
+          "description": "Quantity adjusted"
+        },
+        "reason": {
+          "type": "TEXT",
+          "description": "Reason for adjustment"
+        },
+        "user_id": {
+          "type": "INTEGER",
+          "foreign_key": "users(id)",
+          "description": "User who made the adjustment"
+        },
+        "adjustment_date": {
+          "type": "TIMESTAMP",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "Date of adjustment"
+        }
+      },
+      "indexes": [
+        "idx_inventory_adjustments_date"
+      ]
+    },
+    "invoices": {
+      "description": "Sales invoices",
+      "description_ar": "جدول الفواتير",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "autoincrement": true,
+          "description": "Unique invoice identifier"
+        },
+        "invoice_number": {
+          "type": "TEXT",
+          "unique": true,
+          "nullable": false,
+          "description": "Invoice number"
+        },
+        "customer_id": {
+          "type": "INTEGER",
+          "foreign_key": "customers(id)",
+          "description": "Reference to customer"
+        },
+        "total_amount": {
+          "type": "REAL",
+          "nullable": false,
+          "description": "Total amount before discount"
+        },
+        "discount_amount": {
+          "type": "REAL",
+          "default": 0,
+          "description": "Discount applied"
+        },
+        "final_amount": {
+          "type": "REAL",
+          "nullable": false,
+          "description": "Final amount after discount"
+        },
+        "total_profit": {
+          "type": "REAL",
+          "default": 0,
+          "description": "Total profit from invoice"
+        },
+        "payment_method": {
+          "type": "TEXT",
+          "default": "cash",
+          "description": "Payment method",
+          "enum": ["cash", "card", "credit"]
+        },
+        "created_by": {
+          "type": "INTEGER",
+          "foreign_key": "users(id)",
+          "description": "User who created the invoice"
+        },
+        "created_date": {
+          "type": "TIMESTAMP",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "Creation date"
+        },
+        "sale_date": {
+          "type": "TIMESTAMP",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "Sale date"
+        }
+      },
+      "indexes": [
+        "idx_invoices_date"
+      ]
+    },
+    "cancelled_sales": {
+      "description": "Cancelled/refunded sales",
+      "description_ar": "جدول إلغاء المبيعات",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "autoincrement": true,
+          "description": "Unique cancellation identifier"
+        },
+        "original_sale_id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "foreign_key": "sales(id)",
+          "description": "Reference to original sale"
+        },
+        "product_id": {
+          "type": "INTEGER",
+          "nullable": false,
+          "foreign_key": "products(id)",
+          "description": "Reference to product"
+        },
+        "barcode": {
+          "type": "TEXT",
+          "description": "Product barcode"
+        },
+        "product_name": {
+          "type": "TEXT",
+          "description": "Product name"
+        },
+        "quantity": {
+          "type": "INTEGER",
+          "nullable": false,
+          "description": "Quantity cancelled"
+        },
+        "cost_price": {
+          "type": "REAL",
+          "nullable": false,
+          "description": "Cost price"
+        },
+        "sale_price": {
+          "type": "REAL",
+          "nullable": false,
+          "description": "Sale price"
+        },
+        "total_amount": {
+          "type": "REAL",
+          "nullable": false,
+          "description": "Total amount"
+        },
+        "profit": {
+          "type": "REAL",
+          "nullable": false,
+          "description": "Lost profit"
+        },
+        "cancel_date": {
+          "type": "TIMESTAMP",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "Cancellation date"
+        },
+        "cancelled_by": {
+          "type": "INTEGER",
+          "foreign_key": "users(id)",
+          "description": "User who cancelled"
+        },
+        "reason": {
+          "type": "TEXT",
+          "description": "Reason for cancellation"
+        }
+      },
+      "indexes": [
+        "idx_cancelled_sales_date",
+        "idx_cancelled_sales_original"
+      ]
+    },
+    "expenses": {
+      "description": "Business expenses",
+      "description_ar": "جدول المصروفات",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "autoincrement": true,
+          "description": "Unique expense identifier"
+        },
+        "category": {
+          "type": "TEXT",
+          "nullable": false,
+          "description": "Expense category"
+        },
+        "description": {
+          "type": "TEXT",
+          "nullable": false,
+          "description": "Expense description"
+        },
+        "amount": {
+          "type": "REAL",
+          "nullable": false,
+          "description": "Expense amount"
+        },
+        "expense_date": {
+          "type": "TIMESTAMP",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "Date of expense"
+        },
+        "payment_method": {
+          "type": "TEXT",
+          "default": "نقدي",
+          "description": "Payment method"
+        },
+        "receipt_number": {
+          "type": "TEXT",
+          "description": "Receipt number"
+        },
+        "supplier": {
+          "type": "TEXT",
+          "description": "Supplier name"
+        },
+        "notes": {
+          "type": "TEXT",
+          "description": "Additional notes"
+        },
+        "user_id": {
+          "type": "INTEGER",
+          "foreign_key": "users(id)",
+          "description": "User who recorded the expense"
+        }
+      }
+    },
+    "additional_income": {
+      "description": "Additional income sources",
+      "description_ar": "جدول الإيرادات الإضافية",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "autoincrement": true,
+          "description": "Unique income identifier"
+        },
+        "source": {
+          "type": "TEXT",
+          "nullable": false,
+          "description": "Income source"
+        },
+        "description": {
+          "type": "TEXT",
+          "nullable": false,
+          "description": "Income description"
+        },
+        "amount": {
+          "type": "REAL",
+          "nullable": false,
+          "description": "Income amount"
+        },
+        "income_date": {
+          "type": "TIMESTAMP",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "Date of income"
+        },
+        "payment_method": {
+          "type": "TEXT",
+          "default": "نقدي",
+          "description": "Payment method"
+        },
+        "receipt_number": {
+          "type": "TEXT",
+          "description": "Receipt number"
+        },
+        "notes": {
+          "type": "TEXT",
+          "description": "Additional notes"
+        },
+        "user_id": {
+          "type": "INTEGER",
+          "foreign_key": "users(id)",
+          "description": "User who recorded the income"
+        }
+      }
+    },
+    "budget": {
+      "description": "Monthly budget management",
+      "description_ar": "جدول الميزانية",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "autoincrement": true,
+          "description": "Unique budget identifier"
+        },
+        "category": {
+          "type": "TEXT",
+          "nullable": false,
+          "description": "Budget category"
+        },
+        "monthly_limit": {
+          "type": "REAL",
+          "nullable": false,
+          "description": "Monthly spending limit"
+        },
+        "year": {
+          "type": "INTEGER",
+          "nullable": false,
+          "description": "Budget year"
+        },
+        "month": {
+          "type": "INTEGER",
+          "nullable": false,
+          "description": "Budget month (1-12)"
+        },
+        "current_spent": {
+          "type": "REAL",
+          "default": 0,
+          "description": "Current amount spent"
+        },
+        "notes": {
+          "type": "TEXT",
+          "description": "Additional notes"
+        },
+        "created_date": {
+          "type": "TIMESTAMP",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "Creation date"
+        }
+      },
+      "constraints": [
+        "UNIQUE(category, year, month)"
+      ]
+    },
+    "store_settings": {
+      "description": "Store configuration settings",
+      "description_ar": "جدول إعدادات المتجر",
+      "columns": {
+        "id": {
+          "type": "INTEGER",
+          "primary_key": true,
+          "description": "Setting identifier"
+        },
+        "setting_key": {
+          "type": "TEXT",
+          "unique": true,
+          "nullable": false,
+          "description": "Setting key name"
+        },
+        "setting_value": {
+          "type": "TEXT",
+          "nullable": false,
+          "description": "Setting value"
+        },
+        "updated_at": {
+          "type": "TIMESTAMP",
+          "default": "CURRENT_TIMESTAMP",
+          "description": "Last update timestamp"
+        }
+      }
+    }
+  },
+  "relationships": [
+    {
+      "name": "product_sales",
+      "from": "sales.product_id",
+      "to": "products.id",
+      "type": "many-to-one"
+    },
+    {
+      "name": "customer_sales",
+      "from": "sales.customer_id",
+      "to": "customers.id",
+      "type": "many-to-one"
+    },
+    {
+      "name": "invoice_sales",
+      "from": "sales.invoice_id",
+      "to": "invoices.id",
+      "type": "many-to-one"
+    },
+    {
+      "name": "user_invoices",
+      "from": "invoices.created_by",
+      "to": "users.id",
+      "type": "many-to-one"
+    },
+    {
+      "name": "customer_invoices",
+      "from": "invoices.customer_id",
+      "to": "customers.id",
+      "type": "many-to-one"
+    },
+    {
+      "name": "product_adjustments",
+      "from": "inventory_adjustments.product_id",
+      "to": "products.id",
+      "type": "many-to-one"
+    },
+    {
+      "name": "user_adjustments",
+      "from": "inventory_adjustments.user_id",
+      "to": "users.id",
+      "type": "many-to-one"
+    },
+    {
+      "name": "sale_cancellations",
+      "from": "cancelled_sales.original_sale_id",
+      "to": "sales.id",
+      "type": "many-to-one"
+    },
+    {
+      "name": "user_expenses",
+      "from": "expenses.user_id",
+      "to": "users.id",
+      "type": "many-to-one"
+    },
+    {
+      "name": "user_income",
+      "from": "additional_income.user_id",
+      "to": "users.id",
+      "type": "many-to-one"
+    }
+  ],
+  "indexes": [
+    {
+      "name": "idx_products_barcode",
+      "table": "products",
+      "column": "barcode"
+    },
+    {
+      "name": "idx_products_name",
+      "table": "products",
+      "column": "name"
+    },
+    {
+      "name": "idx_sales_date",
+      "table": "sales",
+      "column": "sale_date"
+    },
+    {
+      "name": "idx_sales_barcode",
+      "table": "sales",
+      "column": "barcode"
+    },
+    {
+      "name": "idx_customers_phone",
+      "table": "customers",
+      "column": "phone"
+    },
+    {
+      "name": "idx_users_username",
+      "table": "users",
+      "column": "username"
+    },
+    {
+      "name": "idx_inventory_adjustments_date",
+      "table": "inventory_adjustments",
+      "column": "adjustment_date"
+    },
+    {
+      "name": "idx_invoices_date",
+      "table": "invoices",
+      "column": "created_date"
+    },
+    {
+      "name": "idx_cancelled_sales_date",
+      "table": "cancelled_sales",
+      "column": "cancel_date"
+    },
+    {
+      "name": "idx_cancelled_sales_original",
+      "table": "cancelled_sales",
+      "column": "original_sale_id"
+    }
+  ],
+  "metadata": {
+    "created_date": "2026-02-16",
+    "version": "1.0.0",
+    "author": "Electrical Store System",
+    "total_tables": 12
+  }
+}
