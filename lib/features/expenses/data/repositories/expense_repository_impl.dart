@@ -1,9 +1,11 @@
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/services/audit_logger_service.dart';
 import '../../domain/entities/expense.dart';
 import '../../domain/repositories/expense_repository.dart';
 
 class ExpenseRepositoryImpl implements ExpenseRepository {
   final DatabaseHelper _databaseHelper;
+  final AuditLoggerService _auditLogger = AuditLoggerService();
 
   ExpenseRepositoryImpl(this._databaseHelper);
 
@@ -77,27 +79,68 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   @override
   Future<int> createExpense(Expense expense) async {
     final db = await _databaseHelper.database;
-    return await db.insert('expenses', expense.toMap());
+    final id = await db.insert('expenses', expense.toMap());
+    
+    await _auditLogger.log(
+      action: AuditAction.expenseCreated,
+      entityType: 'expense',
+      entityId: id,
+      details: 'Created expense: ${expense.description.isNotEmpty ? expense.description : expense.category} - Amount: ${expense.amount}',
+    );
+    
+    return id;
   }
 
   @override
   Future<int> updateExpense(Expense expense) async {
     final db = await _databaseHelper.database;
-    return await db.update(
+    
+    // Get old expense for audit
+    final oldResult = await db.query('expenses', where: 'id = ?', whereArgs: [expense.id]);
+    final oldExpense = oldResult.isNotEmpty ? Expense.fromMap(oldResult.first) : null;
+    
+    final result = await db.update(
       'expenses',
       expense.toMap(),
       where: 'id = ?',
       whereArgs: [expense.id],
     );
+    
+    if (result > 0 && oldExpense != null) {
+      await _auditLogger.log(
+        action: AuditAction.expenseUpdated,
+        entityType: 'expense',
+        entityId: expense.id,
+        details: 'Updated expense ID ${expense.id}: Amount ${oldExpense.amount} -> ${expense.amount}',
+      );
+    }
+    
+    return result;
   }
 
   @override
   Future<int> deleteExpense(int id) async {
     final db = await _databaseHelper.database;
-    return await db.delete(
+    
+    // Get expense details for audit before deleting
+    final result = await db.query('expenses', where: 'id = ?', whereArgs: [id]);
+    final expense = result.isNotEmpty ? Expense.fromMap(result.first) : null;
+    
+    final deleteResult = await db.delete(
       'expenses',
       where: 'id = ?',
       whereArgs: [id],
     );
+    
+    if (deleteResult > 0 && expense != null) {
+      await _auditLogger.log(
+        action: AuditAction.expenseDeleted,
+        entityType: 'expense',
+        entityId: id,
+        details: 'Deleted expense: ${expense.description.isNotEmpty ? expense.description : expense.category} - Amount: ${expense.amount}',
+      );
+    }
+    
+    return deleteResult;
   }
 }

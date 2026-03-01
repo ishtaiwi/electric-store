@@ -7,21 +7,101 @@ import 'package:flutter/services.dart';
 import '../../features/customers/domain/entities/customer.dart';
 import '../../features/invoices/domain/entities/invoice.dart';
 import '../../features/invoices/domain/entities/sale_item.dart';
+import '../../features/price_lists/domain/entities/price_list.dart';
+import '../../features/price_lists/domain/entities/price_list_item.dart';
 
 class PdfService {
   pw.Font? _arabicFont;
+  pw.Font? _arabicBoldFont;
   
   Future<void> _loadArabicFont() async {
-    if (_arabicFont == null) {
-      try {
-        // Try to load Arabic-supporting font
-        final fontData = await rootBundle.load('assets/fonts/NotoSansArabic-Regular.ttf');
-        _arabicFont = pw.Font.ttf(fontData);
-      } catch (e) {
-        // Fallback to default font
-        _arabicFont = null;
+    if (_arabicFont != null) return;
+    
+    try {
+      // Load Arabic-supporting font from system fonts
+      // Try common Arabic-capable fonts available on Windows
+      final fontNames = [
+        'Tahoma',
+        'Arial',
+        'Segoe UI',
+        'Times New Roman',
+      ];
+      
+      for (final fontName in fontNames) {
+        try {
+          final regular = await _loadSystemFont(fontName, bold: false);
+          final bold = await _loadSystemFont(fontName, bold: true);
+          if (regular != null) {
+            _arabicFont = regular;
+            _arabicBoldFont = bold ?? regular;
+            return;
+          }
+        } catch (_) {
+          continue;
+        }
       }
+    } catch (e) {
+      // Fallback: will use default font
     }
+  }
+
+  Future<pw.Font?> _loadSystemFont(String fontName, {bool bold = false}) async {
+    try {
+      final fontFile = await _findSystemFontFile(fontName, bold: bold);
+      if (fontFile != null && await fontFile.exists()) {
+        final bytes = await fontFile.readAsBytes();
+        return pw.Font.ttf(bytes.buffer.asByteData());
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<File?> _findSystemFontFile(String fontName, {bool bold = false}) async {
+    final windowsFontsDir = 'C:\\Windows\\Fonts';
+    
+    // Map font names to their file names
+    final fontFiles = <String, Map<String, String>>{
+      'Tahoma': {'regular': 'tahoma.ttf', 'bold': 'tahomabd.ttf'},
+      'Arial': {'regular': 'arial.ttf', 'bold': 'arialbd.ttf'},
+      'Segoe UI': {'regular': 'segoeui.ttf', 'bold': 'segoeuib.ttf'},
+      'Times New Roman': {'regular': 'times.ttf', 'bold': 'timesbd.ttf'},
+    };
+    
+    final files = fontFiles[fontName];
+    if (files == null) return null;
+    
+    final fileName = bold ? files['bold']! : files['regular']!;
+    final file = File('$windowsFontsDir\\$fileName');
+    
+    if (await file.exists()) return file;
+    return null;
+  }
+
+  pw.TextStyle _baseStyle({bool bold = false, double? fontSize, PdfColor? color}) {
+    return pw.TextStyle(
+      font: bold ? (_arabicBoldFont ?? _arabicFont) : _arabicFont,
+      fontBold: _arabicBoldFont ?? _arabicFont,
+      fontWeight: bold ? pw.FontWeight.bold : null,
+      fontSize: fontSize,
+      color: color,
+    );
+  }
+
+  pw.ThemeData _buildTheme() {
+    if (_arabicFont == null) {
+      return pw.ThemeData.withFont(
+        base: pw.Font.helvetica(),
+        bold: pw.Font.helveticaBold(),
+        italic: pw.Font.helveticaOblique(),
+        boldItalic: pw.Font.helveticaBoldOblique(),
+      );
+    }
+    return pw.ThemeData.withFont(
+      base: _arabicFont!,
+      bold: _arabicBoldFont ?? _arabicFont!,
+      italic: _arabicFont!,
+      boldItalic: _arabicBoldFont ?? _arabicFont!,
+    );
   }
 
   /// Save invoice as PDF file and return the file path
@@ -71,7 +151,7 @@ class PdfService {
     List<SaleItem> items,
     Map<String, dynamic>? storeSettings,
   ) async {
-    final pdf = pw.Document();
+    final pdf = pw.Document(theme: _buildTheme());
     
     final storeName = storeSettings?['store_name'] ?? 'Electrical Store';
     final storeAddress = storeSettings?['address'] ?? '';
@@ -82,6 +162,7 @@ class PdfService {
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
+        textDirection: pw.TextDirection.rtl,
         margin: const pw.EdgeInsets.all(32),
         build: (context) {
           return pw.Column(
@@ -409,7 +490,7 @@ class PdfService {
     Map<int, List<SaleItem>> invoiceItems,
     Map<String, dynamic>? storeSettings,
   ) async {
-    final pdf = pw.Document();
+    final pdf = pw.Document(theme: _buildTheme());
     
     final storeName = storeSettings?['store_name'] ?? 'Electrical Store';
     final storeAddress = storeSettings?['address'] ?? '';
@@ -429,6 +510,7 @@ class PdfService {
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
+        textDirection: pw.TextDirection.rtl,
         margin: const pw.EdgeInsets.all(32),
         build: (context) {
           return pw.Column(
@@ -627,6 +709,7 @@ class PdfService {
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
+          textDirection: pw.TextDirection.rtl,
           margin: const pw.EdgeInsets.all(32),
           build: (context) {
             return pw.Column(
@@ -733,6 +816,287 @@ class PdfService {
         ),
       );
     }
+
+    return pdf;
+  }
+
+  // ==================== Price List PDF ====================
+
+  /// Save price list as PDF file and return the file path
+  Future<String> savePriceListPdf({
+    required PriceList priceList,
+    required List<PriceListItem> items,
+    Map<String, dynamic>? storeSettings,
+    String? customPath,
+  }) async {
+    await _loadArabicFont();
+
+    final pdf = await _buildPriceListPdf(priceList, items, storeSettings);
+
+    final directory = customPath ?? (await getApplicationDocumentsDirectory()).path;
+    final priceListsDir = Directory('$directory/PriceLists');
+    if (!await priceListsDir.exists()) {
+      await priceListsDir.create(recursive: true);
+    }
+
+    final safeName = priceList.title.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
+    final fileName = 'PriceList_${safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    final filePath = '${priceListsDir.path}/$fileName';
+
+    final file = File(filePath);
+    await file.writeAsBytes(await pdf.save());
+
+    return filePath;
+  }
+
+  /// Print price list directly
+  Future<void> printPriceList({
+    required PriceList priceList,
+    required List<PriceListItem> items,
+    Map<String, dynamic>? storeSettings,
+  }) async {
+    await _loadArabicFont();
+    final pdf = await _buildPriceListPdf(priceList, items, storeSettings);
+
+    await Printing.layoutPdf(
+      onLayout: (format) async => pdf.save(),
+      name: 'PriceList_${priceList.title}',
+    );
+  }
+
+  Future<pw.Document> _buildPriceListPdf(
+    PriceList priceList,
+    List<PriceListItem> items,
+    Map<String, dynamic>? storeSettings,
+  ) async {
+    final pdf = pw.Document(theme: _buildTheme());
+
+    final storeName = storeSettings?['store_name'] ?? 'Electrical Store';
+    final storeAddress = storeSettings?['address'] ?? '';
+    final storePhone = storeSettings?['phone'] ?? '';
+    final storeEmail = storeSettings?['email'] ?? '';
+    final currency = storeSettings?['currency'] ?? 'ILS';
+
+    final totalAmount = items.fold(0.0, (sum, item) => sum + item.totalPrice);
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        textDirection: pw.TextDirection.rtl,
+        margin: const pw.EdgeInsets.all(32),
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Header
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        storeName,
+                        style: pw.TextStyle(
+                          fontSize: 24,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.SizedBox(height: 4),
+                      if (storeAddress.isNotEmpty)
+                        pw.Text(storeAddress, style: const pw.TextStyle(fontSize: 10)),
+                      if (storePhone.isNotEmpty)
+                        pw.Text('Phone: $storePhone', style: const pw.TextStyle(fontSize: 10)),
+                      if (storeEmail.isNotEmpty)
+                        pw.Text('Email: $storeEmail', style: const pw.TextStyle(fontSize: 10)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(
+                        'PRICE LIST',
+                        style: pw.TextStyle(
+                          fontSize: 28,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.teal,
+                        ),
+                      ),
+                      pw.SizedBox(height: 8),
+                      pw.Container(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: pw.BoxDecoration(
+                          color: PdfColors.teal50,
+                          borderRadius: pw.BorderRadius.circular(4),
+                        ),
+                        child: pw.Text(
+                          'Quotation Only - Not an Invoice',
+                          style: pw.TextStyle(
+                            fontSize: 9,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.teal,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 20),
+              pw.Divider(thickness: 2, color: PdfColors.teal),
+              pw.SizedBox(height: 16),
+
+              // Price List Info
+              pw.Container(
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: pw.BorderRadius.circular(8),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          priceList.title,
+                          style: pw.TextStyle(
+                            fontSize: 16,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                        pw.SizedBox(height: 4),
+                        if (priceList.customerName != null)
+                          pw.Text(
+                            'Client: ${priceList.customerName}',
+                            style: const pw.TextStyle(fontSize: 11),
+                          ),
+                      ],
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        _buildInfoRow('Date:', _formatDate(priceList.createdAt)),
+                        _buildInfoRow('Items:', '${items.length}'),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+
+              // Items Table
+              pw.Table(
+                border: pw.TableBorder.all(color: PdfColors.grey300),
+                columnWidths: {
+                  0: const pw.FixedColumnWidth(35),
+                  1: const pw.FlexColumnWidth(4),
+                  2: const pw.FlexColumnWidth(1),
+                  3: const pw.FlexColumnWidth(1.5),
+                  4: const pw.FlexColumnWidth(1.5),
+                },
+                children: [
+                  pw.TableRow(
+                    decoration: const pw.BoxDecoration(color: PdfColors.teal),
+                    children: [
+                      _tableHeader('#'),
+                      _tableHeader('Product'),
+                      _tableHeader('Qty'),
+                      _tableHeader('Unit Price'),
+                      _tableHeader('Total'),
+                    ],
+                  ),
+                  ...items.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final item = entry.value;
+                    return pw.TableRow(
+                      decoration: pw.BoxDecoration(
+                        color: index.isEven ? PdfColors.white : PdfColors.grey50,
+                      ),
+                      children: [
+                        _tableCell('${index + 1}', center: true),
+                        _tableCell(item.productName),
+                        _tableCell('${item.quantity}', center: true),
+                        _tableCell('\$$currency ${item.unitPrice.toStringAsFixed(2)}', right: true),
+                        _tableCell('\$$currency ${item.totalPrice.toStringAsFixed(2)}', right: true),
+                      ],
+                    );
+                  }),
+                ],
+              ),
+              pw.SizedBox(height: 16),
+
+              // Total
+              pw.Container(
+                alignment: pw.Alignment.centerRight,
+                child: pw.Container(
+                  width: 220,
+                  padding: const pw.EdgeInsets.all(12),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.teal, width: 2),
+                    borderRadius: pw.BorderRadius.circular(4),
+                    color: PdfColors.teal50,
+                  ),
+                  child: _buildTotalRow(
+                    'TOTAL:',
+                    '\$$currency ${totalAmount.toStringAsFixed(2)}',
+                    bold: true,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+
+              // Notes
+              if (priceList.notes != null && priceList.notes!.isNotEmpty) ...[
+                pw.SizedBox(height: 20),
+                pw.Text(
+                  'Notes:',
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.orange50,
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: pw.Text(
+                    priceList.notes!,
+                    style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                  ),
+                ),
+              ],
+
+              // Footer
+              pw.Spacer(),
+              pw.Divider(color: PdfColors.grey300),
+              pw.SizedBox(height: 8),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'This is a price quotation only and does not constitute a sale or invoice.',
+                    style: pw.TextStyle(
+                      fontStyle: pw.FontStyle.italic,
+                      color: PdfColors.grey500,
+                      fontSize: 9,
+                    ),
+                  ),
+                  pw.Text(
+                    'Generated: ${_formatDate(DateTime.now())}',
+                    style: const pw.TextStyle(
+                      color: PdfColors.grey500,
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
 
     return pdf;
   }

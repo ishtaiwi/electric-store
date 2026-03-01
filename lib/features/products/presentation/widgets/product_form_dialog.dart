@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../core/constants/app_strings.dart';
 import '../../../../core/services/localization_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/product.dart';
@@ -89,8 +88,9 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = LocalizationService();
     return AlertDialog(
-      title: Text(isEditing ? AppStrings.editProduct : AppStrings.addProduct),
+      title: Text(isEditing ? l10n.get('editProduct') : l10n.get('addProduct')),
       content: SizedBox(
         width: 500,
         child: Form(
@@ -102,9 +102,9 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
                 // Name
                 TextFormField(
                   controller: _nameController,
-                  decoration: const InputDecoration(
-                    labelText: AppStrings.productName,
-                    prefixIcon: Icon(Icons.inventory_2),
+                  decoration: InputDecoration(
+                    labelText: l10n.get('productName'),
+                    prefixIcon: const Icon(Icons.inventory_2),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -118,9 +118,9 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
                 // Barcode
                 TextFormField(
                   controller: _barcodeController,
-                  decoration: const InputDecoration(
-                    labelText: AppStrings.barcode,
-                    prefixIcon: Icon(Icons.qr_code),
+                  decoration: InputDecoration(
+                    labelText: l10n.get('barcode'),
+                    prefixIcon: const Icon(Icons.qr_code),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -131,9 +131,9 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
                     Expanded(
                       child: TextFormField(
                         controller: _priceController,
-                        decoration: const InputDecoration(
-                          labelText: AppStrings.price,
-                          prefixIcon: Icon(Icons.attach_money),
+                        decoration: InputDecoration(
+                          labelText: l10n.get('price'),
+                          prefixIcon: const Icon(Icons.attach_money),
                         ),
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         inputFormatters: [
@@ -154,9 +154,9 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
                     Expanded(
                       child: TextFormField(
                         controller: _costPriceController,
-                        decoration: const InputDecoration(
-                          labelText: AppStrings.costPrice,
-                          prefixIcon: Icon(Icons.money_off),
+                        decoration: InputDecoration(
+                          labelText: l10n.get('costPrice'),
+                          prefixIcon: const Icon(Icons.money_off),
                         ),
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         inputFormatters: [
@@ -183,9 +183,9 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
                     Expanded(
                       child: TextFormField(
                         controller: _quantityController,
-                        decoration: const InputDecoration(
-                          labelText: AppStrings.quantity,
-                          prefixIcon: Icon(Icons.numbers),
+                        decoration: InputDecoration(
+                          labelText: l10n.get('quantity'),
+                          prefixIcon: const Icon(Icons.numbers),
                         ),
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -196,9 +196,9 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
                     Expanded(
                       child: TextFormField(
                         controller: _minStockController,
-                        decoration: const InputDecoration(
-                          labelText: AppStrings.minStock,
-                          prefixIcon: Icon(Icons.warning_amber),
+                        decoration: InputDecoration(
+                          labelText: l10n.get('minStock'),
+                          prefixIcon: const Icon(Icons.warning_amber),
                         ),
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -221,9 +221,9 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
                 // Supplier
                 TextFormField(
                   controller: _supplierController,
-                  decoration: const InputDecoration(
-                    labelText: AppStrings.supplier,
-                    prefixIcon: Icon(Icons.business),
+                  decoration: InputDecoration(
+                    labelText: l10n.get('supplier'),
+                    prefixIcon: const Icon(Icons.business),
                   ),
                 ),
 
@@ -261,11 +261,11 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text(AppStrings.cancel),
+          child: Text(l10n.get('cancel')),
         ),
         ElevatedButton(
           onPressed: _save,
-          child: Text(isEditing ? AppStrings.save : AppStrings.add),
+          child: Text(isEditing ? l10n.get('save') : l10n.get('add')),
         ),
       ],
     );

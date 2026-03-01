@@ -69,7 +69,7 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 4,
+      version: 6,
       onCreate: dbExists ? null : _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: _onConfigure,
@@ -102,6 +102,41 @@ class DatabaseHelper {
         await db.execute('CREATE INDEX IF NOT EXISTS idx_invoices_customer ON invoices(customer_id)');
       } catch (_) {
         // Index might already exist
+      }
+    }
+    // Migration: v4 -> v5: Add price_lists and price_list_items tables
+    if (oldVersion < 5) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS price_lists (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          customer_id INTEGER REFERENCES customers(id),
+          notes TEXT,
+          created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS price_list_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          price_list_id INTEGER NOT NULL REFERENCES price_lists(id),
+          product_id INTEGER REFERENCES products(id),
+          product_name TEXT NOT NULL,
+          quantity INTEGER NOT NULL DEFAULT 1,
+          unit_price REAL NOT NULL DEFAULT 0,
+          total_price REAL NOT NULL DEFAULT 0,
+          notes TEXT
+        )
+      ''');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_price_list_items_list ON price_list_items(price_list_id)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_price_lists_customer ON price_lists(customer_id)');
+    }
+    // Migration: v5 -> v6: Add notes column to invoices table
+    if (oldVersion < 6) {
+      final tableInfo = await db.rawQuery('PRAGMA table_info(invoices)');
+      final hasColumn = tableInfo.any((col) => col['name'] == 'notes');
+      if (!hasColumn) {
+        await db.execute('ALTER TABLE invoices ADD COLUMN notes TEXT');
       }
     }
   }
@@ -168,6 +203,7 @@ class DatabaseHelper {
         paid_amount REAL NOT NULL DEFAULT 0,
         total_profit REAL DEFAULT 0,
         payment_method TEXT DEFAULT 'cash',
+        notes TEXT,
         created_by INTEGER REFERENCES users(id),
         created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         sale_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -297,6 +333,32 @@ class DatabaseHelper {
       )
     ''');
 
+    // Price lists table (does NOT affect inventory)
+    await db.execute('''
+      CREATE TABLE price_lists (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        customer_id INTEGER REFERENCES customers(id),
+        notes TEXT,
+        created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
+    // Price list items table
+    await db.execute('''
+      CREATE TABLE price_list_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        price_list_id INTEGER NOT NULL REFERENCES price_lists(id),
+        product_id INTEGER REFERENCES products(id),
+        product_name TEXT NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 1,
+        unit_price REAL NOT NULL DEFAULT 0,
+        total_price REAL NOT NULL DEFAULT 0,
+        notes TEXT
+      )
+    ''');
+
     // Create indexes
     await db.execute('CREATE INDEX idx_products_barcode ON products(barcode)');
     await db.execute('CREATE INDEX idx_products_name ON products(name)');
@@ -309,6 +371,8 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_invoices_customer ON invoices(customer_id)');
     await db.execute('CREATE INDEX idx_cancelled_sales_date ON cancelled_sales(cancel_date)');
     await db.execute('CREATE INDEX idx_cancelled_sales_original ON cancelled_sales(original_sale_id)');
+    await db.execute('CREATE INDEX idx_price_list_items_list ON price_list_items(price_list_id)');
+    await db.execute('CREATE INDEX idx_price_lists_customer ON price_lists(customer_id)');
 
     // Insert default users
     await db.insert('users', {

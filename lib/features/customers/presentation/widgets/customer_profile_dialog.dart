@@ -186,6 +186,9 @@ class _CustomerProfileDialogState extends State<CustomerProfileDialog>
                     backgroundColor: AppColors.success,
                   ),
                 );
+                // Refresh both customer and invoice data
+                context.read<CustomerBloc>().add(CustomerRefresh());
+                di.sl<InvoiceBloc>().add(InvoiceRefresh());
                 _loadInvoices();
               } catch (e) {
                 if (!mounted) return;
@@ -226,8 +229,9 @@ class _CustomerProfileDialogState extends State<CustomerProfileDialog>
     di.sl<InvoiceBloc>().add(
       InvoiceUpdatePaidAmount(invoiceId: invoiceId, paidAmount: newPaidAmount),
     );
-    // Refresh customer data
+    // Refresh both customer and invoice data
     context.read<CustomerBloc>().add(CustomerRefresh());
+    di.sl<InvoiceBloc>().add(InvoiceRefresh());
     // Reload invoices
     _loadInvoices();
     // Show success message

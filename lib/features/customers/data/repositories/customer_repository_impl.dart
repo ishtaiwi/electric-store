@@ -1,11 +1,13 @@
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/services/cache_service.dart';
+import '../../../../core/services/audit_logger_service.dart';
 import '../../domain/entities/customer.dart';
 import '../../domain/repositories/customer_repository.dart';
 
 class CustomerRepositoryImpl implements CustomerRepository {
   final DatabaseHelper _databaseHelper;
   final CacheService _cache = CacheService();
+  final AuditLoggerService _auditLogger = AuditLoggerService();
   static const _customersCacheKey = 'all_customers';
 
   CustomerRepositoryImpl(this._databaseHelper);
@@ -91,6 +93,15 @@ class CustomerRepositoryImpl implements CustomerRepository {
   Future<int> createCustomer(Customer customer) async {
     final db = await _databaseHelper.database;
     final result = await db.insert('customers', customer.toMap());
+    
+    _auditLogger.log(
+      action: AuditAction.customerCreated,
+      entityType: 'customer',
+      entityId: result,
+      entityName: customer.name,
+      details: 'Phone: ${customer.phone ?? "N/A"}',
+    );
+    
     _invalidateCache();
     return result;
   }
@@ -104,6 +115,16 @@ class CustomerRepositoryImpl implements CustomerRepository {
       where: 'id = ?',
       whereArgs: [customer.id],
     );
+    
+    if (result > 0) {
+      _auditLogger.log(
+        action: AuditAction.customerUpdated,
+        entityType: 'customer',
+        entityId: customer.id,
+        entityName: customer.name,
+      );
+    }
+    
     _invalidateCache();
     return result;
   }
@@ -111,11 +132,28 @@ class CustomerRepositoryImpl implements CustomerRepository {
   @override
   Future<int> deleteCustomer(int id) async {
     final db = await _databaseHelper.database;
+    
+    // Get customer info for audit
+    final customerResult = await db.query('customers', where: 'id = ?', whereArgs: [id]);
+    final customerName = customerResult.isNotEmpty 
+        ? customerResult.first['name'] as String? 
+        : null;
+    
     final result = await db.delete(
       'customers',
       where: 'id = ?',
       whereArgs: [id],
     );
+    
+    if (result > 0) {
+      _auditLogger.log(
+        action: AuditAction.customerDeleted,
+        entityType: 'customer',
+        entityId: id,
+        entityName: customerName,
+      );
+    }
+    
     _invalidateCache();
     return result;
   }

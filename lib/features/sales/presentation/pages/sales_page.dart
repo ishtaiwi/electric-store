@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/services/cache_service.dart';
 import '../../../../core/services/localization_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/di/injection_container.dart' as di;
@@ -25,6 +28,7 @@ class SalesPage extends StatefulWidget {
 class _SalesPageState extends State<SalesPage> {
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
+  Timer? _debounceTimer;
   List<Customer> _customers = [];
   int _quantityToAdd = 1;
 
@@ -40,15 +44,35 @@ class _SalesPageState extends State<SalesPage> {
 
   Future<void> _loadCustomers() async {
     final customerRepo = di.sl<CustomerRepository>();
+    // Invalidate cache to get fresh data
+    CacheService().invalidate('all_customers');
     _customers = await customerRepo.getAllCustomers();
     if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _debounceTimer?.cancel();
+    // If empty, refresh immediately (no delay)
+    if (value.isEmpty) {
+      context.read<SalesBloc>().add(SalesSearchProducts(''));
+      setState(() {});
+      return;
+    }
+    // Debounce non-empty queries for 300ms
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        context.read<SalesBloc>().add(SalesSearchProducts(value));
+      }
+    });
+    setState(() {});
   }
 
   void _addToCart(Product product) {
@@ -60,9 +84,12 @@ class _SalesPageState extends State<SalesPage> {
     setState(() {});
   }
 
-  void _showCheckoutDialog() {
+  Future<void> _showCheckoutDialog() async {
     final state = context.read<SalesBloc>().state;
     if (state is SalesReady && state.cart.isNotEmpty) {
+      // Always refresh customer list before showing checkout
+      await _loadCustomers();
+      if (!mounted) return;
       showDialog(
         context: context,
         builder: (dialogContext) => BlocProvider.value(
@@ -100,12 +127,14 @@ class _SalesPageState extends State<SalesPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
         title: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
+                color: AppColors.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.edit, color: AppColors.primary),
@@ -169,7 +198,7 @@ class _SalesPageState extends State<SalesPage> {
               icon: const Icon(Icons.refresh),
               label: Text(LocalizationService().get('reset')),
             ),
-          const Spacer(),
+          const SizedBox(width: 8),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: Text(LocalizationService().get('cancel')),
@@ -289,7 +318,7 @@ class _SalesPageState extends State<SalesPage> {
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
-                                    colors: [AppColors.primary, AppColors.primary.withValues(alpha: 0.8)],
+                                    colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)],
                                   ),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
@@ -329,6 +358,7 @@ class _SalesPageState extends State<SalesPage> {
                                       IconButton(
                                         icon: const Icon(Icons.clear),
                                         onPressed: () {
+                                          _debounceTimer?.cancel();
                                           _searchController.clear();
                                           context.read<SalesBloc>().add(SalesSearchProducts(''));
                                           setState(() {});
@@ -338,7 +368,7 @@ class _SalesPageState extends State<SalesPage> {
                                       padding: const EdgeInsets.all(8),
                                       margin: const EdgeInsets.only(right: 8),
                                       decoration: BoxDecoration(
-                                        color: AppColors.primary.withValues(alpha: 0.1),
+                                        color: AppColors.primary.withOpacity(0.1),
                                         borderRadius: BorderRadius.circular(8),
                                       ),
                                       child: const Icon(Icons.qr_code_scanner, color: AppColors.primary),
@@ -349,10 +379,7 @@ class _SalesPageState extends State<SalesPage> {
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                               ),
                               style: const TextStyle(fontSize: 16),
-                              onChanged: (value) {
-                                context.read<SalesBloc>().add(SalesSearchProducts(value));
-                                setState(() {});
-                              },
+                              onChanged: _onSearchChanged,
                               onSubmitted: (value) {
                                 final product = products.firstWhere(
                                   (p) => p.barcode == value,
@@ -388,7 +415,7 @@ class _SalesPageState extends State<SalesPage> {
                 color: Colors.white,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
+                    color: Colors.black.withOpacity(0.08),
                     blurRadius: 20,
                     offset: const Offset(-5, 0),
                   ),
@@ -400,7 +427,7 @@ class _SalesPageState extends State<SalesPage> {
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.05),
+                      color: AppColors.primary.withOpacity(0.05),
                       border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
                     ),
                     child: Row(
@@ -428,6 +455,13 @@ class _SalesPageState extends State<SalesPage> {
                           ],
                         ),
                         const Spacer(),
+                        // Add Custom Product Button
+                        IconButton(
+                          onPressed: () => _showAddCustomProductDialog(l10n),
+                          icon: const Icon(Icons.add_circle_outline),
+                          color: AppColors.primary,
+                          tooltip: l10n.get('addCustomProduct'),
+                        ),
                         if (cart.isNotEmpty)
                           IconButton(
                             onPressed: () => context.read<SalesBloc>().add(SalesClearCart()),
@@ -458,6 +492,164 @@ class _SalesPageState extends State<SalesPage> {
           ],
         );
       },
+    );
+  }
+
+  void _showAddCustomProductDialog(LocalizationService l10n) {
+    final nameController = TextEditingController();
+    final priceController = TextEditingController();
+    final quantityController = TextEditingController(text: '1');
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.add_box_outlined, color: AppColors.primary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                l10n.get('addCustomProduct'),
+                style: const TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Form(
+          key: formKey,
+          child: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                // Product Name
+                TextFormField(
+                  controller: nameController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: l10n.get('productName'),
+                    hintText: l10n.get('enterProductName'),
+                    prefixIcon: const Icon(Icons.inventory_2_outlined),
+                    filled: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return l10n.get('validNameRequired');
+                    }
+                    return null;
+                  },
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 16),
+                // Price
+                TextFormField(
+                  controller: priceController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: l10n.get('price'),
+                    hintText: l10n.get('enterPrice'),
+                    prefixText: '₪ ',
+                    prefixIcon: const Icon(Icons.attach_money),
+                    filled: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                  ],
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return l10n.get('validPriceRequired');
+                    }
+                    final price = double.tryParse(value);
+                    if (price == null || price <= 0) {
+                      return l10n.get('validPriceRequired');
+                    }
+                    return null;
+                  },
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 16),
+                // Quantity
+                TextFormField(
+                  controller: quantityController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: l10n.get('quantity'),
+                    hintText: l10n.get('enterQuantity'),
+                    prefixIcon: const Icon(Icons.numbers),
+                    filled: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return l10n.get('validQuantityRequired');
+                    }
+                    final qty = int.tryParse(value);
+                    if (qty == null || qty <= 0) {
+                      return l10n.get('validQuantityRequired');
+                    }
+                    return null;
+                  },
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) {
+                    if (formKey.currentState!.validate()) {
+                      final name = nameController.text.trim();
+                      final price = double.parse(priceController.text);
+                      final quantity = int.parse(quantityController.text);
+                      context.read<SalesBloc>().add(SalesAddCustomToCart(
+                        name: name,
+                        price: price,
+                        quantity: quantity,
+                      ));
+                      Navigator.pop(dialogContext);
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(l10n.get('cancel')),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                final name = nameController.text.trim();
+                final price = double.parse(priceController.text);
+                final quantity = int.parse(quantityController.text);
+                context.read<SalesBloc>().add(SalesAddCustomToCart(
+                  name: name,
+                  price: price,
+                  quantity: quantity,
+                ));
+                Navigator.pop(dialogContext);
+              }
+            },
+            icon: const Icon(Icons.add_shopping_cart),
+            label: Text(l10n.get('addToCart')),
+          ),
+        ],
+      ),
     );
   }
 
@@ -524,7 +716,7 @@ class _SalesPageState extends State<SalesPage> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -536,7 +728,7 @@ class _SalesPageState extends State<SalesPage> {
           scrollDirection: Axis.horizontal,
           child: SingleChildScrollView(
             child: DataTable(
-            headingRowColor: WidgetStateProperty.all(AppColors.primary.withValues(alpha: 0.1)),
+            headingRowColor: WidgetStateProperty.all(AppColors.primary.withOpacity(0.1)),
             dataRowMinHeight: 48,
             dataRowMaxHeight: 60,
             columnSpacing: 24,
@@ -557,7 +749,7 @@ class _SalesPageState extends State<SalesPage> {
                 color: WidgetStateProperty.resolveWith((states) {
                   if (isOutOfStock) return Colors.grey[100];
                   if (states.contains(WidgetState.hovered)) {
-                    return AppColors.primary.withValues(alpha: 0.05);
+                    return AppColors.primary.withOpacity(0.05);
                   }
                   return null;
                 }),
@@ -603,10 +795,10 @@ class _SalesPageState extends State<SalesPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
                         color: isOutOfStock 
-                          ? AppColors.error.withValues(alpha: 0.1)
+                          ? AppColors.error.withOpacity(0.1)
                           : isLowStock 
-                            ? AppColors.warning.withValues(alpha: 0.1)
-                            : AppColors.success.withValues(alpha: 0.1),
+                            ? AppColors.warning.withOpacity(0.1)
+                            : AppColors.success.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -643,7 +835,7 @@ class _SalesPageState extends State<SalesPage> {
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: AppColors.error.withValues(alpha: 0.1),
+                            color: AppColors.error.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -702,14 +894,19 @@ class _SalesPageState extends State<SalesPage> {
 
   Widget _buildCartItem(CartItem item, LocalizationService l10n) {
     final hasCustomPrice = item.customPrice != null;
+    final isCustomProduct = item.product.id != null && item.product.id! < 0;
     
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey[50],
+        color: isCustomProduct ? Colors.orange.withOpacity(0.04) : Colors.grey[50],
         borderRadius: BorderRadius.circular(12),
-        border: hasCustomPrice ? Border.all(color: AppColors.success.withValues(alpha: 0.5)) : null,
+        border: isCustomProduct
+            ? Border.all(color: Colors.orange.withOpacity(0.4))
+            : hasCustomPrice
+                ? Border.all(color: AppColors.success.withOpacity(0.5))
+                : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -722,11 +919,35 @@ class _SalesPageState extends State<SalesPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      item.product.name,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        if (isCustomProduct) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              l10n.get('customProduct'),
+                              style: const TextStyle(
+                                color: Colors.orange,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                        Expanded(
+                          child: Text(
+                            item.product.name,
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Row(
@@ -761,7 +982,7 @@ class _SalesPageState extends State<SalesPage> {
                             child: Icon(
                               Icons.edit_outlined,
                               size: 14,
-                              color: AppColors.primary.withValues(alpha: 0.7),
+                              color: AppColors.primary.withOpacity(0.7),
                             ),
                           ),
                         ),
@@ -815,7 +1036,7 @@ class _SalesPageState extends State<SalesPage> {
                       ),
                     ),
                     InkWell(
-                      onTap: item.quantity < item.product.quantity
+                      onTap: (isCustomProduct || item.quantity < item.product.quantity)
                           ? () {
                               context.read<SalesBloc>().add(
                                 SalesUpdateCartQuantity(productId: item.product.id!, quantity: item.quantity + 1),
@@ -828,7 +1049,7 @@ class _SalesPageState extends State<SalesPage> {
                         child: Icon(
                           Icons.add,
                           size: 18,
-                          color: item.quantity < item.product.quantity ? AppColors.primary : Colors.grey[300],
+                          color: (isCustomProduct || item.quantity < item.product.quantity) ? AppColors.primary : Colors.grey[300],
                         ),
                       ),
                     ),
@@ -860,7 +1081,7 @@ class _SalesPageState extends State<SalesPage> {
         border: Border(top: BorderSide(color: Colors.grey[200]!)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, -5),
           ),
@@ -892,7 +1113,7 @@ class _SalesPageState extends State<SalesPage> {
           Container(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
+              color: AppColors.primary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(

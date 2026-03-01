@@ -82,6 +82,7 @@ class Invoice extends Equatable {
       'total_profit': totalProfit,
       'payment_method': paymentMethod,
       'created_by': createdBy,
+      if (notes != null) 'notes': notes,
     };
   }
 

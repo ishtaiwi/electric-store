@@ -83,7 +83,10 @@ class _InvoicesPageState extends State<InvoicesPage> {
         value: context.read<InvoiceBloc>(),
         child: InvoiceDetailsDialog(invoice: invoice),
       ),
-    );
+    ).then((_) {
+      // Auto-refresh invoices after dialog closes (payment/delete may have happened)
+      _loadInvoices();
+    });
   }
 
   String _getPaymentMethodLabel(String method) {
@@ -165,6 +168,8 @@ class _InvoicesPageState extends State<InvoicesPage> {
               backgroundColor: AppColors.success,
             ),
           );
+          // Auto-reload invoices after any operation (payment, delete, etc.)
+          _loadInvoices();
         } else if (state is InvoicePdfSaved) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -216,7 +221,7 @@ class _InvoicesPageState extends State<InvoicesPage> {
           }).toList();
         }
 
-        double totalAmount = filteredInvoices.fold(0, (sum, i) => sum + i.totalAmount);
+        double totalAmount = filteredInvoices.fold(0, (sum, i) => sum + i.finalAmount);
 
         return Padding(
           padding: const EdgeInsets.all(24),
@@ -302,6 +307,7 @@ class _InvoicesPageState extends State<InvoicesPage> {
                       ),
                       DropdownMenuItem(value: 'cash', child: Text(LocalizationService().get('cash'))),
                       DropdownMenuItem(value: 'card', child: Text(LocalizationService().get('card'))),
+                      DropdownMenuItem(value: 'credit', child: Text(LocalizationService().get('credit'))),
                     ],
                     onChanged: (value) {
                       setState(() => _selectedPaymentMethod = value);
@@ -389,7 +395,7 @@ class _InvoicesPageState extends State<InvoicesPage> {
                                 DataCell(Text('${invoice.items?.length ?? 0}')),
                                 DataCell(
                                   Text(
-                                    '₪${invoice.totalAmount.toStringAsFixed(2)}',
+                                    '₪${invoice.finalAmount.toStringAsFixed(2)}',
                                     style: const TextStyle(fontWeight: FontWeight.w500),
                                   ),
                                 ),

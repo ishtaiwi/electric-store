@@ -1,5 +1,6 @@
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/services/cache_service.dart';
+import '../../../../core/services/audit_logger_service.dart';
 import '../../domain/entities/invoice.dart';
 import '../../domain/entities/sale_item.dart';
 import '../../domain/repositories/invoice_repository.dart';
@@ -7,6 +8,7 @@ import '../../domain/repositories/invoice_repository.dart';
 class InvoiceRepositoryImpl implements InvoiceRepository {
   final DatabaseHelper _databaseHelper;
   final CacheService _cache = CacheService();
+  final AuditLoggerService _auditLogger = AuditLoggerService();
   static const _invoicesCacheKey = 'all_invoices';
 
   InvoiceRepositoryImpl(this._databaseHelper);
@@ -126,7 +128,8 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
   Future<List<SaleItem>> getInvoiceItems(int invoiceId) async {
     final db = await _databaseHelper.database;
     final result = await db.rawQuery('''
-      SELECT s.*, p.name as product_name
+      SELECT s.*,
+        COALESCE(s.product_name, p.name, 'Unknown Product') as product_name
       FROM sales s
       LEFT JOIN products p ON s.product_id = p.id
       WHERE s.invoice_id = ?
@@ -138,6 +141,15 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
   Future<int> deleteInvoice(int id) async {
     final db = await _databaseHelper.database;
 
+    // Get invoice info for audit log
+    final invoiceResult = await db.query('invoices', where: 'id = ?', whereArgs: [id]);
+    final invoiceNumber = invoiceResult.isNotEmpty 
+        ? invoiceResult.first['invoice_number'] as String? 
+        : null;
+    final finalAmount = invoiceResult.isNotEmpty 
+        ? invoiceResult.first['final_amount'] 
+        : null;
+
     // Get all sales for this invoice to restore quantities
     final sales = await db.query(
       'sales',
@@ -145,12 +157,15 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
       whereArgs: [id],
     );
 
-    // Restore product quantities
+    // Restore product quantities (only for real products, not custom items)
     for (final sale in sales) {
-      await db.rawUpdate(
-        'UPDATE products SET quantity = quantity + ?, last_updated = ? WHERE id = ?',
-        [sale['quantity'], DateTime.now().toIso8601String(), sale['product_id']],
-      );
+      final productId = sale['product_id'];
+      if (productId != null) {
+        await db.rawUpdate(
+          'UPDATE products SET quantity = quantity + ?, last_updated = ? WHERE id = ?',
+          [sale['quantity'], DateTime.now().toIso8601String(), productId],
+        );
+      }
     }
 
     // Delete sales
@@ -158,6 +173,17 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
 
     // Delete invoice
     final result = await db.delete('invoices', where: 'id = ?', whereArgs: [id]);
+    
+    if (result > 0) {
+      _auditLogger.log(
+        action: AuditAction.invoiceDeleted,
+        entityType: 'invoice',
+        entityId: id,
+        entityName: invoiceNumber,
+        details: 'Amount: $finalAmount, Items restored to inventory',
+      );
+    }
+    
     _invalidateCache();
     return result;
   }
@@ -165,12 +191,59 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
   @override
   Future<int> updateInvoicePaidAmount(int invoiceId, double paidAmount) async {
     final db = await _databaseHelper.database;
+    
+    // Get old paid amount for audit
+    final oldInvoice = await db.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+    final oldPaidAmount = oldInvoice.isNotEmpty 
+        ? oldInvoice.first['paid_amount'] 
+        : 0;
+    final invoiceNumber = oldInvoice.isNotEmpty 
+        ? oldInvoice.first['invoice_number'] as String?
+        : null;
+    
     final result = await db.update(
       'invoices',
       {'paid_amount': paidAmount},
       where: 'id = ?',
       whereArgs: [invoiceId],
     );
+    
+    if (result > 0) {
+      _auditLogger.log(
+        action: AuditAction.paymentRecorded,
+        entityType: 'invoice',
+        entityId: invoiceId,
+        entityName: invoiceNumber,
+        oldValue: oldPaidAmount.toString(),
+        newValue: paidAmount.toString(),
+        details: 'Payment amount updated',
+      );
+    }
+    
+    _invalidateCache();
+    return result;
+  }
+
+  @override
+  Future<int> updateInvoiceNotes(int invoiceId, String? notes) async {
+    final db = await _databaseHelper.database;
+    
+    final result = await db.update(
+      'invoices',
+      {'notes': notes},
+      where: 'id = ?',
+      whereArgs: [invoiceId],
+    );
+    
+    if (result > 0) {
+      _auditLogger.log(
+        action: AuditAction.invoiceUpdated,
+        entityType: 'invoice',
+        entityId: invoiceId,
+        details: 'Invoice notes updated',
+      );
+    }
+    
     _invalidateCache();
     return result;
   }

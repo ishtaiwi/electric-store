@@ -26,14 +26,13 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
   String _paymentMethod = 'cash';
   final _discountController = TextEditingController(text: '0');
   final _paidAmountController = TextEditingController();
-  final _customerSearchController = TextEditingController();
+
   bool _isFullPayment = true;
 
   @override
   void dispose() {
     _discountController.dispose();
     _paidAmountController.dispose();
-    _customerSearchController.dispose();
     super.dispose();
   }
 
@@ -147,7 +146,7 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
                   },
                   optionsViewBuilder: (context, onSelected, options) {
                     return Align(
-                      alignment: Alignment.topLeft,
+                      alignment: LocalizationService().isArabic ? AlignmentDirectional.topEnd : AlignmentDirectional.topStart,
                       child: Material(
                         elevation: 4,
                         child: ConstrainedBox(
@@ -163,9 +162,9 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
                                   leading: const Icon(Icons.person_outline),
                                   title: Text(LocalizationService().get('walkInCustomer')),
                                   onTap: () {
-                                    _customerSearchController.clear();
                                     setState(() => _selectedCustomerId = null);
-                                    Navigator.of(context, rootNavigator: true).pop();
+                                    // Close autocomplete dropdown by removing focus
+                                    FocusManager.instance.primaryFocus?.unfocus();
                                   },
                                 );
                               }

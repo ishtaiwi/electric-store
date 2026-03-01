@@ -19,6 +19,9 @@ class CustomersPage extends StatefulWidget {
 class _CustomersPageState extends State<CustomersPage> {
   final _searchController = TextEditingController();
   bool _showDebtOnly = false;
+  
+  // Store customers locally to prevent disappearing on state changes
+  List<Customer> _customers = [];
 
   @override
   void dispose() {
@@ -69,7 +72,11 @@ class _CustomersPageState extends State<CustomersPage> {
           child: CustomerAccountStatementPage(customer: customer),
         ),
       ),
-    );
+    ).then((_) {
+      // Auto-refresh customers after returning from account statement
+      // (payments or deletions may have changed balances)
+      this.context.read<CustomerBloc>().add(CustomerRefresh());
+    });
   }
 
   @override
@@ -93,11 +100,12 @@ class _CustomersPageState extends State<CustomersPage> {
         }
       },
       builder: (context, state) {
-        List<Customer> customers = [];
-
+        // Update cached customers when list is loaded
         if (state is CustomerLoaded) {
-          customers = state.customers;
+          _customers = state.customers;
         }
+
+        List<Customer> customers = _customers;
 
         return Padding(
           padding: const EdgeInsets.all(24),
@@ -178,7 +186,7 @@ class _CustomersPageState extends State<CustomersPage> {
                     onPressed: () {
                       _searchController.clear();
                       setState(() => _showDebtOnly = false);
-                      context.read<CustomerBloc>().add(CustomerLoadAll());
+                      context.read<CustomerBloc>().add(CustomerRefresh());
                     },
                     tooltip: LocalizationService().get('refresh'),
                   ),
@@ -197,7 +205,7 @@ class _CustomersPageState extends State<CustomersPage> {
 
               // Data Table
               Expanded(
-                child: state is CustomerLoading
+                child: state is CustomerLoading && _customers.isEmpty
                     ? const Center(child: CircularProgressIndicator())
                     : Card(
                         child: DataTable2(

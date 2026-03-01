@@ -115,7 +115,9 @@ class CustomerOperationSuccess extends CustomerState {
 // BLoC
 class CustomerBloc extends Bloc<CustomerEvent, CustomerState> {
   final CustomerRepository _customerRepository;
-  bool _hasLoadedOnce = false;
+  
+  // Persistent list that survives state transitions (success, error, transactions, etc.)
+  List<Customer> _lastKnownCustomers = [];
 
   CustomerBloc(this._customerRepository) : super(CustomerInitial()) {
     on<CustomerLoadAll>(_onLoadAll);
@@ -132,16 +134,21 @@ class CustomerBloc extends Bloc<CustomerEvent, CustomerState> {
     CustomerLoadAll event,
     Emitter<CustomerState> emit,
   ) async {
-    // Skip reload if already loaded (singleton behavior)
-    if (_hasLoadedOnce && state is CustomerLoaded) {
+    // If we already have customers cached, re-emit them immediately
+    // (the repository has its own 1-minute cache, so this won't hit DB repeatedly)
+    if (_lastKnownCustomers.isNotEmpty && state is CustomerLoaded) {
       return;
     }
     emit(CustomerLoading());
     try {
       final customers = await _customerRepository.getAllCustomers();
-      _hasLoadedOnce = true;
+      _lastKnownCustomers = customers;
       emit(CustomerLoaded(customers));
     } catch (e) {
+      // On error, still show the last known list if available
+      if (_lastKnownCustomers.isNotEmpty) {
+        emit(CustomerLoaded(_lastKnownCustomers));
+      }
       emit(CustomerError(e.toString()));
     }
   }
@@ -150,12 +157,15 @@ class CustomerBloc extends Bloc<CustomerEvent, CustomerState> {
     CustomerRefresh event,
     Emitter<CustomerState> emit,
   ) async {
-    emit(CustomerLoading());
+    // Don't emit loading to avoid flicker — keep showing old data
     try {
       final customers = await _customerRepository.getAllCustomers();
-      _hasLoadedOnce = true;
+      _lastKnownCustomers = customers;
       emit(CustomerLoaded(customers));
     } catch (e) {
+      if (_lastKnownCustomers.isNotEmpty) {
+        emit(CustomerLoaded(_lastKnownCustomers));
+      }
       emit(CustomerError(e.toString()));
     }
   }
@@ -164,9 +174,9 @@ class CustomerBloc extends Bloc<CustomerEvent, CustomerState> {
     CustomerSearch event,
     Emitter<CustomerState> emit,
   ) async {
-    emit(CustomerLoading());
     try {
       final customers = await _customerRepository.searchCustomers(event.query);
+      // Don't update _lastKnownCustomers — search is a filtered view
       emit(CustomerLoaded(customers));
     } catch (e) {
       emit(CustomerError(e.toString()));
@@ -177,9 +187,9 @@ class CustomerBloc extends Bloc<CustomerEvent, CustomerState> {
     CustomerLoadWithDebt event,
     Emitter<CustomerState> emit,
   ) async {
-    emit(CustomerLoading());
     try {
       final customers = await _customerRepository.getCustomersWithDebt();
+      // Don't update _lastKnownCustomers — debt filter is a filtered view
       emit(CustomerLoaded(customers));
     } catch (e) {
       emit(CustomerError(e.toString()));
@@ -193,20 +203,17 @@ class CustomerBloc extends Bloc<CustomerEvent, CustomerState> {
     try {
       final newId = await _customerRepository.createCustomer(event.customer);
       
-      // Fast update: Get the new customer and add to list
+      // Get the new customer with computed balance from DB
       final newCustomer = await _customerRepository.getCustomerById(newId);
-      if (newCustomer != null && state is CustomerLoaded) {
-        final currentCustomers = (state as CustomerLoaded).customers;
-        final updatedList = [...currentCustomers, newCustomer]
+      if (newCustomer != null) {
+        _lastKnownCustomers = [..._lastKnownCustomers, newCustomer]
           ..sort((a, b) => a.name.compareTo(b.name));
-        emit(CustomerLoaded(updatedList));
-      } else {
-        // If no state yet, force reload
-        _hasLoadedOnce = false;
-        add(CustomerLoadAll());
       }
       
+      emit(CustomerLoaded(List.from(_lastKnownCustomers)));
       emit(CustomerOperationSuccess(LocalizationService().get('customerCreated')));
+      // Re-emit list to keep UI showing after success state
+      emit(CustomerLoaded(List.from(_lastKnownCustomers)));
     } catch (e) {
       emit(CustomerError(e.toString()));
     }
@@ -219,17 +226,18 @@ class CustomerBloc extends Bloc<CustomerEvent, CustomerState> {
     try {
       await _customerRepository.updateCustomer(event.customer);
       
-      // Fast update: Get the updated customer and replace in list
+      // Get the updated customer with computed balance from DB
       final updatedCustomer = await _customerRepository.getCustomerById(event.customer.id!);
-      if (updatedCustomer != null && state is CustomerLoaded) {
-        final currentCustomers = (state as CustomerLoaded).customers;
-        final updatedList = currentCustomers.map((c) {
+      if (updatedCustomer != null) {
+        _lastKnownCustomers = _lastKnownCustomers.map((c) {
           return c.id == event.customer.id ? updatedCustomer : c;
         }).toList();
-        emit(CustomerLoaded(updatedList));
       }
       
+      emit(CustomerLoaded(List.from(_lastKnownCustomers)));
       emit(CustomerOperationSuccess(LocalizationService().get('customerUpdated')));
+      // Re-emit list to keep UI showing after success state
+      emit(CustomerLoaded(List.from(_lastKnownCustomers)));
     } catch (e) {
       emit(CustomerError(e.toString()));
     }
@@ -242,14 +250,12 @@ class CustomerBloc extends Bloc<CustomerEvent, CustomerState> {
     try {
       await _customerRepository.deleteCustomer(event.id);
       
-      // Fast update: Remove from list immediately
-      if (state is CustomerLoaded) {
-        final currentCustomers = (state as CustomerLoaded).customers;
-        final updatedList = currentCustomers.where((c) => c.id != event.id).toList();
-        emit(CustomerLoaded(updatedList));
-      }
+      _lastKnownCustomers = _lastKnownCustomers.where((c) => c.id != event.id).toList();
       
+      emit(CustomerLoaded(List.from(_lastKnownCustomers)));
       emit(CustomerOperationSuccess(LocalizationService().get('customerDeleted')));
+      // Re-emit list to keep UI showing after success state
+      emit(CustomerLoaded(List.from(_lastKnownCustomers)));
     } catch (e) {
       emit(CustomerError(e.toString()));
     }
@@ -259,7 +265,6 @@ class CustomerBloc extends Bloc<CustomerEvent, CustomerState> {
     CustomerLoadTransactions event,
     Emitter<CustomerState> emit,
   ) async {
-    emit(CustomerLoading());
     try {
       final customer = await _customerRepository.getCustomerById(event.customerId);
       if (customer == null) {

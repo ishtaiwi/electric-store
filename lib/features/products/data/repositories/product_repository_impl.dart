@@ -1,11 +1,13 @@
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/services/cache_service.dart';
+import '../../../../core/services/audit_logger_service.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/repositories/product_repository.dart';
 
 class ProductRepositoryImpl implements ProductRepository {
   final DatabaseHelper _databaseHelper;
   final CacheService _cache = CacheService();
+  final AuditLoggerService _auditLogger = AuditLoggerService();
 
   ProductRepositoryImpl(this._databaseHelper);
 
@@ -129,6 +131,15 @@ class ProductRepositoryImpl implements ProductRepository {
   Future<int> createProduct(Product product) async {
     final db = await _databaseHelper.database;
     final result = await db.insert('products', product.toMap());
+    
+    _auditLogger.log(
+      action: AuditAction.productCreated,
+      entityType: 'product',
+      entityId: result,
+      entityName: product.name,
+      details: 'Qty: ${product.quantity}, Price: ${product.price}',
+    );
+    
     // Invalidate product-related caches
     _cache.invalidate(CacheKeys.products);
     _cache.invalidate(CacheKeys.lowStockProducts);
@@ -138,12 +149,29 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   Future<int> updateProduct(Product product) async {
     final db = await _databaseHelper.database;
+    
+    // Get old product for audit
+    final oldResult = await db.query('products', where: 'id = ?', whereArgs: [product.id]);
+    final oldProduct = oldResult.isNotEmpty ? Product.fromMap(oldResult.first) : null;
+    
     final result = await db.update(
       'products',
       {...product.toMap(), 'last_updated': DateTime.now().toIso8601String()},
       where: 'id = ?',
       whereArgs: [product.id],
     );
+    
+    if (result > 0 && oldProduct != null) {
+      _auditLogger.log(
+        action: AuditAction.productUpdated,
+        entityType: 'product',
+        entityId: product.id,
+        entityName: product.name,
+        oldValue: 'Qty: ${oldProduct.quantity}, Price: ${oldProduct.price}',
+        newValue: 'Qty: ${product.quantity}, Price: ${product.price}',
+      );
+    }
+    
     // Invalidate caches
     _cache.invalidate(CacheKeys.products);
     _cache.invalidate(CacheKeys.productById(product.id!));
@@ -157,11 +185,28 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   Future<int> deleteProduct(int id) async {
     final db = await _databaseHelper.database;
+    
+    // Get product info for audit
+    final productResult = await db.query('products', where: 'id = ?', whereArgs: [id]);
+    final productName = productResult.isNotEmpty 
+        ? productResult.first['name'] as String? 
+        : null;
+    
     final result = await db.delete(
       'products',
       where: 'id = ?',
       whereArgs: [id],
     );
+    
+    if (result > 0) {
+      _auditLogger.log(
+        action: AuditAction.productDeleted,
+        entityType: 'product',
+        entityId: id,
+        entityName: productName,
+      );
+    }
+    
     // Invalidate caches
     _cache.invalidate(CacheKeys.products);
     _cache.invalidate(CacheKeys.productById(id));

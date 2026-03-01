@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/di/injection_container.dart' as di;
 import '../../../../core/services/localization_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../customers/presentation/bloc/customer_bloc.dart';
@@ -19,12 +20,21 @@ class InvoiceDetailsDialog extends StatefulWidget {
 
 class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
   final _paymentController = TextEditingController();
+  final _notesController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _showPaymentForm = false;
+  bool _isEditingNotes = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _notesController.text = widget.invoice.notes ?? '';
+  }
 
   @override
   void dispose() {
     _paymentController.dispose();
+    _notesController.dispose();
     super.dispose();
   }
 
@@ -36,14 +46,8 @@ class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
         InvoiceUpdatePaidAmount(invoiceId: widget.invoice.id!, paidAmount: newPaidAmount),
       );
       // Also refresh customers to update their balance
-      context.read<CustomerBloc>().add(CustomerRefresh());
+      di.sl<CustomerBloc>().add(CustomerRefresh());
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(LocalizationService().get('paymentRecorded')),
-          backgroundColor: AppColors.success,
-        ),
-      );
     }
   }
 
@@ -52,14 +56,8 @@ class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
       InvoiceUpdatePaidAmount(invoiceId: widget.invoice.id!, paidAmount: widget.invoice.finalAmount),
     );
     // Also refresh customers to update their balance
-    context.read<CustomerBloc>().add(CustomerRefresh());
+    di.sl<CustomerBloc>().add(CustomerRefresh());
     Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(LocalizationService().get('paymentRecorded')),
-        backgroundColor: AppColors.success,
-      ),
-    );
   }
 
   @override
@@ -333,7 +331,7 @@ class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
                             ),
                           ),
                           Text(
-                            '₪${widget.invoice.totalAmount.toStringAsFixed(2)}',
+                            '₪${widget.invoice.finalAmount.toStringAsFixed(2)}',
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 18,
@@ -346,17 +344,95 @@ class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
                   ),
                 ),
 
-                // Notes
-                if (widget.invoice.notes != null && widget.invoice.notes!.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'Notes: ${widget.invoice.notes}',
-                    style: const TextStyle(
-                      fontStyle: FontStyle.italic,
-                      color: AppColors.textSecondary,
-                    ),
+                // Notes section
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.03),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.primary.withOpacity(0.1)),
                   ),
-                ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.note, size: 18, color: AppColors.textSecondary),
+                              const SizedBox(width: 8),
+                              Text(
+                                LocalizationService().get('notes'),
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          if (!_isEditingNotes)
+                            IconButton(
+                              icon: const Icon(Icons.edit, size: 18),
+                              onPressed: () => setState(() => _isEditingNotes = true),
+                              tooltip: LocalizationService().get('edit'),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (_isEditingNotes)
+                        Column(
+                          children: [
+                            TextField(
+                              controller: _notesController,
+                              maxLines: 3,
+                              decoration: InputDecoration(
+                                hintText: LocalizationService().get('enterNotes'),
+                                border: const OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                TextButton(
+                                  onPressed: () {
+                                    _notesController.text = widget.invoice.notes ?? '';
+                                    setState(() => _isEditingNotes = false);
+                                  },
+                                  child: Text(LocalizationService().get('cancel')),
+                                ),
+                                const SizedBox(width: 8),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    context.read<InvoiceBloc>().add(
+                                      InvoiceUpdateNotes(
+                                        invoiceId: widget.invoice.id!,
+                                        notes: _notesController.text.isEmpty ? null : _notesController.text,
+                                      ),
+                                    );
+                                    setState(() => _isEditingNotes = false);
+                                  },
+                                  child: Text(LocalizationService().get('save')),
+                                ),
+                              ],
+                            ),
+                          ],
+                        )
+                      else
+                        Text(
+                          widget.invoice.notes?.isNotEmpty == true 
+                              ? widget.invoice.notes! 
+                              : LocalizationService().get('noNotes'),
+                          style: TextStyle(
+                            fontStyle: widget.invoice.notes?.isNotEmpty == true ? FontStyle.normal : FontStyle.italic,
+                            color: widget.invoice.notes?.isNotEmpty == true ? AppColors.textPrimary : AppColors.textSecondary,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),

@@ -194,18 +194,18 @@ class DashboardContent extends StatelessWidget {
         description: l10n.get('viewInvoices'),
       ),
       _QuickAccessItem(
-        icon: Icons.analytics,
-        label: l10n.get('reports'),
-        color: Colors.purple,
-        pageIndex: 5,
-        description: l10n.get('viewReports'),
-      ),
-      _QuickAccessItem(
         icon: Icons.money_off,
         label: l10n.get('expenses'),
         color: AppColors.error,
-        pageIndex: 6,
+        pageIndex: 5,
         description: l10n.get('trackExpenses'),
+      ),
+      _QuickAccessItem(
+        icon: Icons.list_alt,
+        label: l10n.get('priceLists'),
+        color: Colors.purple,
+        pageIndex: 6,
+        description: l10n.get('priceLists'),
       ),
       _QuickAccessItem(
         icon: Icons.backup,

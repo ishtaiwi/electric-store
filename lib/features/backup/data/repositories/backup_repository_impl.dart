@@ -2,10 +2,12 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:intl/intl.dart';
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/services/audit_logger_service.dart';
 import '../../domain/repositories/backup_repository.dart';
 
 class BackupRepositoryImpl implements BackupRepository {
   final DatabaseHelper _databaseHelper;
+  final AuditLoggerService _auditLogger = AuditLoggerService();
 
   BackupRepositoryImpl(this._databaseHelper);
 
@@ -31,8 +33,12 @@ class BackupRepositoryImpl implements BackupRepository {
     // Use provided destination or default backup directory
     final destPath = destinationPath ?? await getBackupDirectory();
     
-    // Close database connections to ensure data integrity
-    await db.rawQuery('PRAGMA wal_checkpoint(FULL)');
+    // Flush WAL to ensure data integrity
+    try {
+      await db.execute('PRAGMA wal_checkpoint(FULL)');
+    } catch (_) {
+      // Some drivers don't support this, continue anyway
+    }
     
     // Create backup filename with timestamp
     final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
@@ -62,6 +68,14 @@ class BackupRepositoryImpl implements BackupRepository {
     if (await shmFile.exists()) {
       await shmFile.copy('$backupPath-shm');
     }
+
+    // Log backup creation
+    _auditLogger.log(
+      action: AuditAction.backupCreated,
+      entityType: 'backup',
+      entityName: backupFileName,
+      details: 'Path: $backupPath',
+    );
 
     return backupPath;
   }
@@ -116,6 +130,14 @@ class BackupRepositoryImpl implements BackupRepository {
         if (await safetyFile.exists()) {
           await safetyFile.delete();
         }
+
+        // Log backup restore
+        _auditLogger.log(
+          action: AuditAction.backupRestored,
+          entityType: 'backup',
+          entityName: path.basename(backupPath),
+          details: 'Restored from: $backupPath',
+        );
 
         return true;
       } catch (e) {

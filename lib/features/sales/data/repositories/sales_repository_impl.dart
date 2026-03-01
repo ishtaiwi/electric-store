@@ -66,14 +66,17 @@ class SalesRepositoryImpl implements SalesRepository {
         final itemFinal = itemTotal - itemDiscount;
         final itemProfit = item.profit - itemDiscount;
 
+        // Determine if this is a real product or a custom item
+        final isRealProduct = item.product.id != null && item.product.id! > 0;
+
         // Insert sale record
         final saleId = await txn.insert('sales', {
-          'product_id': item.product.id,
+          'product_id': isRealProduct ? item.product.id : null,
           'barcode': item.product.barcode,
           'product_name': item.product.name,
           'quantity': item.quantity,
           'cost_price': item.product.costPrice,
-          'sale_price': item.product.price,
+          'sale_price': item.unitPrice,
           'total_amount': itemTotal,
           'profit': itemProfit,
           'customer_id': customerId,
@@ -82,20 +85,22 @@ class SalesRepositoryImpl implements SalesRepository {
           'invoice_id': invoiceId,
         });
 
-        // Update product quantity
-        await txn.rawUpdate(
-          'UPDATE products SET quantity = quantity - ?, last_updated = ? WHERE id = ?',
-          [item.quantity, DateTime.now().toIso8601String(), item.product.id],
-        );
+        // Update product quantity only for real products (not custom items)
+        if (isRealProduct) {
+          await txn.rawUpdate(
+            'UPDATE products SET quantity = quantity - ?, last_updated = ? WHERE id = ?',
+            [item.quantity, DateTime.now().toIso8601String(), item.product.id],
+          );
+        }
 
         saleItems.add(SaleItem(
           id: saleId,
-          productId: item.product.id,
+          productId: isRealProduct ? item.product.id : null,
           barcode: item.product.barcode,
           productName: item.product.name,
           quantity: item.quantity,
           costPrice: item.product.costPrice,
-          salePrice: item.product.price,
+          salePrice: item.unitPrice,
           totalAmount: itemTotal,
           profit: itemProfit,
           discountAmount: itemDiscount,

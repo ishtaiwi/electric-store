@@ -1,6 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
-import 'dart:async';
 import '../../../../core/services/localization_service.dart';
 import '../../../products/domain/entities/product.dart';
 import '../../../products/domain/repositories/product_repository.dart';
@@ -40,6 +39,21 @@ class SalesAddToCart extends SalesEvent {
 
   @override
   List<Object?> get props => [product, quantity];
+}
+
+class SalesAddCustomToCart extends SalesEvent {
+  final String name;
+  final double price;
+  final int quantity;
+
+  const SalesAddCustomToCart({
+    required this.name,
+    required this.price,
+    this.quantity = 1,
+  });
+
+  @override
+  List<Object?> get props => [name, price, quantity];
 }
 
 class SalesRemoveFromCart extends SalesEvent {
@@ -213,7 +227,6 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
   final SalesRepository _salesRepository;
   final ProductRepository _productRepository;
   final InvoiceRepository _invoiceRepository;
-  Timer? _searchDebounce;
   static const _pageSize = 50;
 
   SalesBloc(this._salesRepository, this._productRepository, this._invoiceRepository)
@@ -223,6 +236,7 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
     on<SalesLoadMoreProducts>(_onLoadMoreProducts);
     on<SalesSearchProducts>(_onSearchProducts);
     on<SalesAddToCart>(_onAddToCart);
+    on<SalesAddCustomToCart>(_onAddCustomToCart);
     on<SalesRemoveFromCart>(_onRemoveFromCart);
     on<SalesUpdateCartQuantity>(_onUpdateCartQuantity);
     on<SalesUpdateCartPrice>(_onUpdateCartPrice);
@@ -236,7 +250,6 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
 
   @override
   Future<void> close() {
-    _searchDebounce?.cancel();
     return super.close();
   }
 
@@ -341,7 +354,7 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
   ) async {
     final currentState = _currentState;
     
-    // If empty query, reload all products
+    // If empty query, reload all products immediately
     if (event.query.isEmpty) {
       try {
         final products = await _productRepository.getProductsPaginated(limit: _pageSize, offset: 0);
@@ -357,10 +370,15 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
     }
     
     try {
-      final products = await _productRepository.searchProducts(event.query);
+      // Use paginated search for consistent performance
+      final products = await _productRepository.searchProductsPaginated(
+        event.query,
+        limit: _pageSize,
+        offset: 0,
+      );
       emit(currentState.copyWith(
         products: products,
-        hasMore: products.length >= 100,
+        hasMore: products.length >= _pageSize,
         currentSearchQuery: event.query,
       ));
     } catch (e) {
@@ -397,6 +415,30 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
     emit(currentState.copyWith(cart: cart));
   }
 
+  /// Counter for generating unique negative IDs for custom products
+  int _customProductIdCounter = -1;
+
+  void _onAddCustomToCart(
+    SalesAddCustomToCart event,
+    Emitter<SalesState> emit,
+  ) {
+    final currentState = _currentState;
+    final cart = List<CartItem>.from(currentState.cart);
+
+    // Create a temporary Product with a unique negative ID
+    final customProduct = Product(
+      id: _customProductIdCounter--,
+      name: event.name,
+      quantity: 999999, // No stock limit for custom products
+      price: event.price,
+      costPrice: 0,
+      note: 'custom',
+    );
+
+    cart.add(CartItem(product: customProduct, quantity: event.quantity));
+    emit(currentState.copyWith(cart: cart));
+  }
+
   void _onRemoveFromCart(
     SalesRemoveFromCart event,
     Emitter<SalesState> emit,
@@ -417,8 +459,12 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
     if (index >= 0) {
       if (event.quantity <= 0) {
         cart.removeAt(index);
-      } else if (event.quantity <= cart[index].product.quantity) {
-        cart[index] = cart[index].copyWith(quantity: event.quantity);
+      } else {
+        // Custom products (negative IDs) have no stock limit
+        final isCustom = event.productId < 0;
+        if (isCustom || event.quantity <= cart[index].product.quantity) {
+          cart[index] = cart[index].copyWith(quantity: event.quantity);
+        }
       }
     }
 

@@ -14,6 +14,9 @@ abstract class InvoiceRepository {
   // Payment update
   Future<int> updateInvoicePaidAmount(int invoiceId, double paidAmount);
   
+  // Notes update
+  Future<int> updateInvoiceNotes(int invoiceId, String? notes);
+  
   // Pagination support
   Future<List<Invoice>> getInvoicesPaginated({int limit = 50, int offset = 0});
   Future<int> getInvoicesCount();

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -61,21 +62,30 @@ class _BackupPageState extends State<BackupPage> {
   }
 
   Future<void> _createBackup() async {
-    setState(() => _isBackingUp = true);
-    
     try {
+      // Let user pick a folder to save the backup
+      final selectedDirectory = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: LocalizationService().get('createBackup'),
+      );
+
+      if (selectedDirectory == null) {
+        // User cancelled
+        return;
+      }
+
+      setState(() => _isBackingUp = true);
+
       final repo = sl<BackupRepository>();
-      final path = await repo.createBackup();
+      final path = await repo.createBackup(selectedDirectory);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${LocalizationService().get('backupCreated')} $path'),
+            content: Text('${LocalizationService().get('backupCreated')}\n$path'),
             backgroundColor: AppColors.success,
             duration: const Duration(seconds: 5),
           ),
         );
-        _loadBackupHistory();
       }
     } catch (e) {
       if (mounted) {
@@ -90,6 +100,32 @@ class _BackupPageState extends State<BackupPage> {
     
     if (mounted) {
       setState(() => _isBackingUp = false);
+    }
+  }
+
+  Future<void> _pickAndRestoreBackup() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['db'],
+        dialogTitle: LocalizationService().get('selectBackupFile'),
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final filePath = result.files.single.path;
+      if (filePath == null) return;
+
+      await _restoreBackup(filePath);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${LocalizationService().get('restoreFailed')} $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     }
   }
 
@@ -239,14 +275,7 @@ class _BackupPageState extends State<BackupPage> {
                   description: LocalizationService().get('selectBackupFile'),
                   buttonText: LocalizationService().get('browseFiles'),
                   isLoading: _isRestoring,
-                  onPressed: () async {
-                    // In a real app, you'd use file_picker here
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(LocalizationService().get('selectBackupHint')),
-                      ),
-                    );
-                  },
+                  onPressed: _pickAndRestoreBackup,
                   color: AppColors.warning,
                 ),
               ),
@@ -254,117 +283,8 @@ class _BackupPageState extends State<BackupPage> {
           ),
           const SizedBox(height: 32),
 
-          // Backup History
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                LocalizationService().get('backupHistory'),
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: _loadBackupHistory,
-                tooltip: LocalizationService().get('refresh'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Backup List
-          Expanded(
-            child: _backupHistory.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.backup_outlined,
-                          size: 64,
-                          color: AppColors.textSecondary.withOpacity(0.5),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          LocalizationService().get('noBackupsFound'),
-                          style: TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          LocalizationService().get('createFirstBackup'),
-                          style: TextStyle(
-                            color: AppColors.textSecondary.withOpacity(0.7),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: _backupHistory.length,
-                    itemBuilder: (context, index) {
-                      final backup = _backupHistory[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.archive,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                          title: Text(backup['name'] ?? LocalizationService().get('unknown')),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 4),
-                              Text(
-                                _dateFormat.format(backup['date'] as DateTime),
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                              Text(
-                                _formatFileSize(backup['size'] as int),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          isThreeLine: true,
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.restore),
-                                onPressed: _isRestoring
-                                    ? null
-                                    : () => _restoreBackup(backup['path']),
-                                tooltip: LocalizationService().get('restore'),
-                                color: AppColors.warning,
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete),
-                                onPressed: () => _deleteBackup(backup['path']),
-                                tooltip: LocalizationService().get('delete'),
-                                color: AppColors.error,
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
+          // Spacer to push info card down
+          const Spacer(),
 
           // Info Card
           Container(

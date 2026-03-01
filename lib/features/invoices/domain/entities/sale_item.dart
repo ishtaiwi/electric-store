@@ -42,7 +42,7 @@ class SaleItem extends Equatable {
       id: map['id'] as int?,
       productId: map['product_id'] as int?,
       barcode: map['barcode'] as String?,
-      productName: map['product_name'] as String,
+      productName: (map['product_name'] as String?) ?? 'Unknown Product',
       quantity: map['quantity'] as int,
       costPrice: (map['cost_price'] as num).toDouble(),
       salePrice: (map['sale_price'] as num).toDouble(),

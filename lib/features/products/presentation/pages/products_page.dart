@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:data_table_2/data_table_2.dart';
-import '../../../../core/constants/app_strings.dart';
 import '../../../../core/services/localization_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/product.dart';
@@ -47,15 +46,16 @@ class _ProductsPageState extends State<ProductsPage> {
   }
 
   void _confirmDelete(Product product) {
+    final l10n = LocalizationService();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text(AppStrings.confirmDelete),
-        content: Text('${LocalizationService().get('confirmDeleteItem')} "${product.name}"?'),
+        title: Text(l10n.get('confirmDelete')),
+        content: Text('${l10n.get('confirmDeleteItem')} "${product.name}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text(AppStrings.cancel),
+            child: Text(l10n.get('cancel')),
           ),
           ElevatedButton(
             onPressed: () {
@@ -63,7 +63,7 @@ class _ProductsPageState extends State<ProductsPage> {
               this.context.read<ProductBloc>().add(ProductDelete(product.id!));
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text(AppStrings.delete),
+            child: Text(l10n.get('delete')),
           ),
         ],
       ),

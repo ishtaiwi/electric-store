@@ -17,6 +17,8 @@ import '../../../expenses/presentation/bloc/expense_bloc.dart';
 import '../../../expenses/presentation/pages/expenses_page.dart';
 import '../../../settings/presentation/pages/settings_page.dart';
 import '../../../backup/presentation/pages/backup_page.dart';
+import '../../../price_lists/presentation/bloc/price_list_bloc.dart';
+import '../../../price_lists/presentation/pages/price_lists_page.dart';
 import '../widgets/dashboard_content.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -36,6 +38,7 @@ class _DashboardPageState extends State<DashboardPage> {
   late final InvoiceBloc _invoiceBloc;
   late final ReportBloc _reportBloc;
   late final ExpenseBloc _expenseBloc;
+  late final PriceListBloc _priceListBloc;
   
   // All pages pre-built for IndexedStack (instant switching)
   late final List<Widget> _pages;
@@ -50,6 +53,7 @@ class _DashboardPageState extends State<DashboardPage> {
     _invoiceBloc = di.sl<InvoiceBloc>();
     _reportBloc = di.sl<ReportBloc>();
     _expenseBloc = di.sl<ExpenseBloc>();
+    _priceListBloc = di.sl<PriceListBloc>();
     
     // Build all pages once (widgets only, no data loading yet)
     _pages = _buildAllPages();
@@ -107,6 +111,11 @@ class _DashboardPageState extends State<DashboardPage> {
           _expenseBloc.add(ExpenseLoadAll());
         }
         break;
+      case 6: // Price Lists
+        if (_priceListBloc.state is PriceListInitial) {
+          _priceListBloc.add(PriceListLoadAll());
+        }
+        break;
     }
   }
 
@@ -148,9 +157,14 @@ class _DashboardPageState extends State<DashboardPage> {
         value: _expenseBloc,
         child: const ExpensesPage(),
       ),
-      // 6: Backup
+      // 6: Price Lists
+      BlocProvider.value(
+        value: _priceListBloc,
+        child: const PriceListsPage(),
+      ),
+      // 7: Backup
       const BackupPage(),
-      // 7: Settings
+      // 8: Settings
       const SettingsPage(),
     ];
   }
@@ -179,6 +193,10 @@ class _DashboardPageState extends State<DashboardPage> {
     NavigationItem(
       icon: Icons.money_off,
       label: LocalizationService().get('expenses'),
+    ),
+    NavigationItem(
+      icon: Icons.list_alt,
+      label: LocalizationService().get('priceLists'),
     ),
     NavigationItem(
       icon: Icons.backup,

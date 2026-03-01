@@ -249,7 +249,9 @@ class _CustomerAccountStatementPageState
     di.sl<InvoiceBloc>().add(
       InvoiceUpdatePaidAmount(invoiceId: invoiceId, paidAmount: newPaidAmount),
     );
+    // Refresh both customer and invoice data
     context.read<CustomerBloc>().add(CustomerRefresh());
+    di.sl<InvoiceBloc>().add(InvoiceRefresh());
     _loadData();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -279,7 +281,9 @@ class _CustomerAccountStatementPageState
                 final invoiceRepo = di.sl<InvoiceRepository>();
                 await invoiceRepo.deleteInvoice(invoice.id!);
                 if (!mounted) return;
+                // Refresh both customer and invoice data
                 context.read<CustomerBloc>().add(CustomerRefresh());
+                di.sl<InvoiceBloc>().add(InvoiceRefresh());
                 _loadData();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(

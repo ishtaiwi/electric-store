@@ -95,6 +95,16 @@ class InvoiceUpdatePaidAmount extends InvoiceEvent {
   List<Object?> get props => [invoiceId, paidAmount];
 }
 
+class InvoiceUpdateNotes extends InvoiceEvent {
+  final int invoiceId;
+  final String? notes;
+
+  const InvoiceUpdateNotes({required this.invoiceId, this.notes});
+
+  @override
+  List<Object?> get props => [invoiceId, notes];
+}
+
 /// Fast update: adds invoice to list without DB reload
 class InvoiceAdded extends InvoiceEvent {
   final Invoice invoice;
@@ -188,7 +198,9 @@ class InvoiceBloc extends Bloc<InvoiceEvent, InvoiceState> {
   final InvoiceRepository _invoiceRepository;
   final PdfService _pdfService;
   final SettingsRepository _settingsRepository;
-  bool _hasLoadedOnce = false;
+  
+  // Persistent list that survives state transitions (details, success, error, etc.)
+  List<Invoice> _lastKnownInvoices = [];
 
   InvoiceBloc(
     this._invoiceRepository,
@@ -206,6 +218,7 @@ class InvoiceBloc extends Bloc<InvoiceEvent, InvoiceState> {
     on<InvoicePrint>(_onPrint);
     on<InvoiceSavePdf>(_onSavePdf);
     on<InvoiceUpdatePaidAmount>(_onUpdatePaidAmount);
+    on<InvoiceUpdateNotes>(_onUpdateNotes);
     on<InvoiceAdded>(_onInvoiceAdded);
     on<InvoiceUpdated>(_onInvoiceUpdated);
   }
@@ -214,16 +227,18 @@ class InvoiceBloc extends Bloc<InvoiceEvent, InvoiceState> {
     InvoiceLoadAll event,
     Emitter<InvoiceState> emit,
   ) async {
-    // Skip reload if already loaded (singleton behavior)
-    if (_hasLoadedOnce && state is InvoiceListLoaded) {
+    if (_lastKnownInvoices.isNotEmpty && state is InvoiceListLoaded) {
       return;
     }
     emit(InvoiceLoading());
     try {
       final invoices = await _invoiceRepository.getAllInvoices();
-      _hasLoadedOnce = true;
+      _lastKnownInvoices = invoices;
       emit(InvoiceListLoaded(invoices));
     } catch (e) {
+      if (_lastKnownInvoices.isNotEmpty) {
+        emit(InvoiceListLoaded(_lastKnownInvoices));
+      }
       emit(InvoiceError(e.toString()));
     }
   }
@@ -232,12 +247,14 @@ class InvoiceBloc extends Bloc<InvoiceEvent, InvoiceState> {
     InvoiceRefresh event,
     Emitter<InvoiceState> emit,
   ) async {
-    emit(InvoiceLoading());
     try {
       final invoices = await _invoiceRepository.getAllInvoices();
-      _hasLoadedOnce = true;
+      _lastKnownInvoices = invoices;
       emit(InvoiceListLoaded(invoices));
     } catch (e) {
+      if (_lastKnownInvoices.isNotEmpty) {
+        emit(InvoiceListLoaded(_lastKnownInvoices));
+      }
       emit(InvoiceError(e.toString()));
     }
   }
@@ -264,11 +281,15 @@ class InvoiceBloc extends Bloc<InvoiceEvent, InvoiceState> {
     InvoiceLoadByDateRange event,
     Emitter<InvoiceState> emit,
   ) async {
-    emit(InvoiceLoading());
+    // Don't emit loading to avoid flicker — keep showing old data
     try {
       final invoices = await _invoiceRepository.getInvoicesByDateRange(event.start, event.end);
+      _lastKnownInvoices = invoices;
       emit(InvoiceListLoaded(invoices));
     } catch (e) {
+      if (_lastKnownInvoices.isNotEmpty) {
+        emit(InvoiceListLoaded(_lastKnownInvoices));
+      }
       emit(InvoiceError(e.toString()));
     }
   }
@@ -277,11 +298,14 @@ class InvoiceBloc extends Bloc<InvoiceEvent, InvoiceState> {
     InvoiceLoadByCustomer event,
     Emitter<InvoiceState> emit,
   ) async {
-    emit(InvoiceLoading());
     try {
       final invoices = await _invoiceRepository.getInvoicesByCustomer(event.customerId);
+      _lastKnownInvoices = invoices;
       emit(InvoiceListLoaded(invoices));
     } catch (e) {
+      if (_lastKnownInvoices.isNotEmpty) {
+        emit(InvoiceListLoaded(_lastKnownInvoices));
+      }
       emit(InvoiceError(e.toString()));
     }
   }
@@ -290,11 +314,14 @@ class InvoiceBloc extends Bloc<InvoiceEvent, InvoiceState> {
     InvoiceLoadToday event,
     Emitter<InvoiceState> emit,
   ) async {
-    emit(InvoiceLoading());
     try {
       final invoices = await _invoiceRepository.getInvoicesToday();
+      _lastKnownInvoices = invoices;
       emit(InvoiceListLoaded(invoices));
     } catch (e) {
+      if (_lastKnownInvoices.isNotEmpty) {
+        emit(InvoiceListLoaded(_lastKnownInvoices));
+      }
       emit(InvoiceError(e.toString()));
     }
   }
@@ -303,28 +330,16 @@ class InvoiceBloc extends Bloc<InvoiceEvent, InvoiceState> {
     InvoiceDelete event,
     Emitter<InvoiceState> emit,
   ) async {
-    // Capture current list before delete
-    final currentState = state;
-    List<Invoice> currentList = [];
-    if (currentState is InvoiceListLoaded) {
-      currentList = List.from(currentState.invoices);
-    }
-    
     try {
       await _invoiceRepository.deleteInvoice(event.id);
       
-      // Fast update: remove from list directly
-      if (currentList.isNotEmpty) {
-        currentList.removeWhere((inv) => inv.id == event.id);
-        emit(InvoiceListLoaded(currentList));
-      }
+      // Remove from persistent list
+      _lastKnownInvoices = _lastKnownInvoices.where((inv) => inv.id != event.id).toList();
       
+      emit(InvoiceListLoaded(List.from(_lastKnownInvoices)));
       emit(InvoiceOperationSuccess(LocalizationService().get('invoiceDeleted')));
-      
-      // Re-emit list to keep UI showing invoices
-      if (currentList.isNotEmpty) {
-        emit(InvoiceListLoaded(currentList));
-      }
+      // Re-emit list to keep UI showing after success state
+      emit(InvoiceListLoaded(List.from(_lastKnownInvoices)));
     } catch (e) {
       emit(InvoiceError(e.toString()));
     }
@@ -406,32 +421,41 @@ class InvoiceBloc extends Bloc<InvoiceEvent, InvoiceState> {
     InvoiceUpdatePaidAmount event,
     Emitter<InvoiceState> emit,
   ) async {
-    // Capture current list
-    final currentState = state;
-    List<Invoice> currentList = [];
-    if (currentState is InvoiceListLoaded) {
-      currentList = List.from(currentState.invoices);
-    }
-    
     try {
       await _invoiceRepository.updateInvoicePaidAmount(event.invoiceId, event.paidAmount);
       
-      // Fast update: update the invoice in list directly
-      if (currentList.isNotEmpty) {
-        final index = currentList.indexWhere((inv) => inv.id == event.invoiceId);
-        if (index != -1) {
-          final updated = currentList[index].copyWith(paidAmount: event.paidAmount);
-          currentList[index] = updated;
-          emit(InvoiceListLoaded(currentList));
-        }
+      // Update in persistent list
+      final index = _lastKnownInvoices.indexWhere((inv) => inv.id == event.invoiceId);
+      if (index != -1) {
+        _lastKnownInvoices[index] = _lastKnownInvoices[index].copyWith(paidAmount: event.paidAmount);
       }
       
+      emit(InvoiceListLoaded(List.from(_lastKnownInvoices)));
       emit(InvoiceOperationSuccess(LocalizationService().get('paymentRecorded')));
+      // Re-emit list to keep UI showing after success state
+      emit(InvoiceListLoaded(List.from(_lastKnownInvoices)));
+    } catch (e) {
+      emit(InvoiceError(e.toString()));
+    }
+  }
+
+  Future<void> _onUpdateNotes(
+    InvoiceUpdateNotes event,
+    Emitter<InvoiceState> emit,
+  ) async {
+    try {
+      await _invoiceRepository.updateInvoiceNotes(event.invoiceId, event.notes);
       
-      // Re-emit list to keep UI showing
-      if (currentList.isNotEmpty) {
-        emit(InvoiceListLoaded(currentList));
+      // Update in persistent list
+      final index = _lastKnownInvoices.indexWhere((inv) => inv.id == event.invoiceId);
+      if (index != -1) {
+        _lastKnownInvoices[index] = _lastKnownInvoices[index].copyWith(notes: event.notes);
       }
+      
+      emit(InvoiceListLoaded(List.from(_lastKnownInvoices)));
+      emit(InvoiceOperationSuccess(LocalizationService().get('notesSaved')));
+      // Re-emit list to keep UI showing after success state
+      emit(InvoiceListLoaded(List.from(_lastKnownInvoices)));
     } catch (e) {
       emit(InvoiceError(e.toString()));
     }
@@ -442,17 +466,9 @@ class InvoiceBloc extends Bloc<InvoiceEvent, InvoiceState> {
     InvoiceAdded event,
     Emitter<InvoiceState> emit,
   ) {
-    final currentState = state;
-    List<Invoice> currentList = [];
-    
-    if (currentState is InvoiceListLoaded) {
-      currentList = List.from(currentState.invoices);
-    }
-    
-    // Add new invoice at the beginning (most recent first)
-    currentList.insert(0, event.invoice);
-    _hasLoadedOnce = true;
-    emit(InvoiceListLoaded(currentList));
+    // Add to persistent list at the beginning (most recent first)
+    _lastKnownInvoices = [event.invoice, ..._lastKnownInvoices];
+    emit(InvoiceListLoaded(List.from(_lastKnownInvoices)));
   }
 
   /// Fast update: update invoice in list without DB reload
@@ -460,14 +476,10 @@ class InvoiceBloc extends Bloc<InvoiceEvent, InvoiceState> {
     InvoiceUpdated event,
     Emitter<InvoiceState> emit,
   ) {
-    final currentState = state;
-    if (currentState is InvoiceListLoaded) {
-      final currentList = List<Invoice>.from(currentState.invoices);
-      final index = currentList.indexWhere((inv) => inv.id == event.invoice.id);
-      if (index != -1) {
-        currentList[index] = event.invoice;
-        emit(InvoiceListLoaded(currentList));
-      }
+    final index = _lastKnownInvoices.indexWhere((inv) => inv.id == event.invoice.id);
+    if (index != -1) {
+      _lastKnownInvoices[index] = event.invoice;
     }
+    emit(InvoiceListLoaded(List.from(_lastKnownInvoices)));
   }
 }
