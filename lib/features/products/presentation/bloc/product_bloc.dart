@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/services/localization_service.dart';
+import '../../../../core/services/smart_search_service.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/repositories/product_repository.dart';
 
@@ -135,6 +136,7 @@ class ProductOperationSuccess extends ProductState {
 // BLoC
 class ProductBloc extends Bloc<ProductEvent, ProductState> {
   final ProductRepository _productRepository;
+  final SmartSearchService _smartSearchService = SmartSearchService();
   static const int _pageSize = 50;
 
   ProductBloc(this._productRepository) : super(ProductInitial()) {
@@ -154,8 +156,10 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     ProductLoadAll event,
     Emitter<ProductState> emit,
   ) async {
-    // If products are already loaded, don't reload (avoid unnecessary loading)
-    if (state is ProductLoaded && (state as ProductLoaded).products.isNotEmpty) {
+    // If we already have the full product list (not from a search), re-emit it
+    if (state is ProductLoaded && 
+        (state as ProductLoaded).products.isNotEmpty &&
+        (state as ProductLoaded).currentSearchQuery.isEmpty) {
       return;
     }
     
@@ -245,14 +249,42 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
 
     emit(ProductLoading());
     try {
-      final products = await _productRepository.searchProducts(event.query);
+      // Use smart search for fuzzy matching and natural language understanding
+      final smartResults = await _smartSearchService.smartSearchProducts(event.query);
+      
+      // Convert smart search results to Product entities
+      final products = smartResults.map((map) => Product(
+        id: map['id'] as int?,
+        name: map['name'] as String,
+        barcode: map['barcode'] as String?,
+        quantity: map['quantity'] as int? ?? 0,
+        price: (map['price'] as num?)?.toDouble() ?? 0.0,
+        costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0.0,
+        note: map['note'] as String?,
+        supplier: map['supplier'] as String?,
+        minStock: map['min_stock'] as int? ?? 5,
+        lastUpdated: map['last_updated'] != null
+            ? DateTime.tryParse(map['last_updated'] as String)
+            : null,
+      )).toList();
+      
       emit(ProductLoaded(
         products: products,
-        hasMore: false, // Search results are already limited
+        hasMore: false,
         currentSearchQuery: event.query,
       ));
     } catch (e) {
-      emit(ProductError(e.toString()));
+      // Fallback to regular search on error
+      try {
+        final products = await _productRepository.searchProducts(event.query);
+        emit(ProductLoaded(
+          products: products,
+          hasMore: false,
+          currentSearchQuery: event.query,
+        ));
+      } catch (fallbackError) {
+        emit(ProductError(fallbackError.toString()));
+      }
     }
   }
 

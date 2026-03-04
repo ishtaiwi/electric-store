@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/services/localization_service.dart';
+import '../../../../core/services/smart_search_service.dart';
 import '../../../products/domain/entities/product.dart';
 import '../../../products/domain/repositories/product_repository.dart';
 import '../../../invoices/domain/entities/invoice.dart';
@@ -227,6 +228,7 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
   final SalesRepository _salesRepository;
   final ProductRepository _productRepository;
   final InvoiceRepository _invoiceRepository;
+  final SmartSearchService _smartSearchService = SmartSearchService();
   static const _pageSize = 50;
 
   SalesBloc(this._salesRepository, this._productRepository, this._invoiceRepository)
@@ -370,19 +372,46 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
     }
     
     try {
-      // Use paginated search for consistent performance
-      final products = await _productRepository.searchProductsPaginated(
-        event.query,
-        limit: _pageSize,
-        offset: 0,
-      );
+      // Use smart search for fuzzy matching and natural language understanding
+      final smartResults = await _smartSearchService.smartSearchProducts(event.query);
+      
+      // Convert smart search results to Product entities
+      final products = smartResults.map((map) => Product(
+        id: map['id'] as int?,
+        name: map['name'] as String,
+        barcode: map['barcode'] as String?,
+        quantity: map['quantity'] as int? ?? 0,
+        price: (map['price'] as num?)?.toDouble() ?? 0.0,
+        costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0.0,
+        note: map['note'] as String?,
+        supplier: map['supplier'] as String?,
+        minStock: map['min_stock'] as int? ?? 5,
+        lastUpdated: map['last_updated'] != null
+            ? DateTime.tryParse(map['last_updated'] as String)
+            : null,
+      )).toList();
+      
       emit(currentState.copyWith(
         products: products,
-        hasMore: products.length >= _pageSize,
+        hasMore: false, // Smart search returns all relevant results
         currentSearchQuery: event.query,
       ));
     } catch (e) {
-      emit(SalesError(e.toString()));
+      // Fallback to regular search on error
+      try {
+        final products = await _productRepository.searchProductsPaginated(
+          event.query,
+          limit: _pageSize,
+          offset: 0,
+        );
+        emit(currentState.copyWith(
+          products: products,
+          hasMore: products.length >= _pageSize,
+          currentSearchQuery: event.query,
+        ));
+      } catch (fallbackError) {
+        emit(SalesError(fallbackError.toString()));
+      }
     }
   }
 

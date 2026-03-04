@@ -160,186 +160,207 @@ class PdfService {
     final currency = storeSettings?['currency'] ?? 'ILS';
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         textDirection: pw.TextDirection.rtl,
         margin: const pw.EdgeInsets.all(32),
-        build: (context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              // Header
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        storeName,
-                        style: pw.TextStyle(
-                          fontSize: 24,
-                          fontWeight: pw.FontWeight.bold,
+        header: (context) {
+          if (context.pageNumber == 1) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                // Header
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          'فاتورة',
+                          style: pw.TextStyle(
+                            fontSize: 24,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      pw.SizedBox(height: 4),
-                      if (storeAddress.isNotEmpty)
-                        pw.Text(storeAddress, style: const pw.TextStyle(fontSize: 10)),
-                      if (storePhone.isNotEmpty)
-                        pw.Text('Phone: $storePhone', style: const pw.TextStyle(fontSize: 10)),
-                      if (storeEmail.isNotEmpty)
-                        pw.Text('Email: $storeEmail', style: const pw.TextStyle(fontSize: 10)),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text(
-                        'INVOICE',
-                        style: pw.TextStyle(
-                          fontSize: 28,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.blue,
+                      ],
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text(
+                          storeName,
+                          style: pw.TextStyle(
+                            fontSize: 24,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      pw.SizedBox(height: 8),
-                      pw.Text(
-                        '#${invoice.id}',
-                        style: pw.TextStyle(
-                          fontSize: 16,
-                          fontWeight: pw.FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 24),
-              pw.Divider(thickness: 2),
-              pw.SizedBox(height: 16),
-
-              // Invoice Info
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        'Bill To:',
-                        style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.grey700,
-                        ),
-                      ),
-                      pw.SizedBox(height: 4),
-                      pw.Text(
-                        invoice.customerName ?? 'Walk-in Customer',
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      _buildInfoRow('Date:', _formatDate(invoice.createdAt)),
-                      _buildInfoRow('Payment:', _formatPaymentMethod(invoice.paymentMethod)),
-                      _buildInfoRow('Cashier:', invoice.userName ?? '-'),
-                    ],
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 24),
-
-              // Items Table
-              pw.Table(
-                border: pw.TableBorder.all(color: PdfColors.grey300),
-                columnWidths: {
-                  0: const pw.FlexColumnWidth(3),
-                  1: const pw.FlexColumnWidth(1),
-                  2: const pw.FlexColumnWidth(1.5),
-                  3: const pw.FlexColumnWidth(1.5),
-                },
-                children: [
-                  // Header
-                  pw.TableRow(
-                    decoration: const pw.BoxDecoration(color: PdfColors.blue),
-                    children: [
-                      _tableHeader('Product'),
-                      _tableHeader('Qty'),
-                      _tableHeader('Unit Price'),
-                      _tableHeader('Total'),
-                    ],
-                  ),
-                  // Items
-                  ...items.map((item) => pw.TableRow(
-                    children: [
-                      _tableCell(item.productName),
-                      _tableCell('${item.quantity}', center: true),
-                      _tableCell('\$$currency ${item.unitPrice.toStringAsFixed(2)}', right: true),
-                      _tableCell('\$$currency ${item.totalPrice.toStringAsFixed(2)}', right: true),
-                    ],
-                  )),
-                ],
-              ),
-              pw.SizedBox(height: 16),
-
-              // Totals
-              pw.Container(
-                alignment: pw.Alignment.centerRight,
-                child: pw.Container(
-                  width: 200,
-                  child: pw.Column(
-                    children: [
-                      _buildTotalRow('Subtotal:', '\$$currency ${invoice.subtotal.toStringAsFixed(2)}'),
-                      if (invoice.discountAmount > 0)
-                        _buildTotalRow(
-                          'Discount:',
-                          '-\$$currency ${invoice.discountAmount.toStringAsFixed(2)}',
-                          color: PdfColors.red,
-                        ),
-                      pw.Divider(thickness: 1),
-                      _buildTotalRow(
-                        'TOTAL:',
-                        '\$$currency ${invoice.totalAmount.toStringAsFixed(2)}',
-                        bold: true,
-                        fontSize: 14,
-                      ),
-                    ],
-                  ),
+                        pw.SizedBox(height: 4),
+                        if (storeAddress.isNotEmpty)
+                          pw.Text(storeAddress, style: const pw.TextStyle(fontSize: 10)),
+                        if (storePhone.isNotEmpty)
+                          pw.Text('هاتف: $storePhone', style: const pw.TextStyle(fontSize: 10)),
+                        if (storeEmail.isNotEmpty)
+                          pw.Text('بريد: $storeEmail', style: const pw.TextStyle(fontSize: 10)),
+                      ],
+                    ),
+                  ],
                 ),
-              ),
-              pw.SizedBox(height: 32),
-
-              // Notes
-              if (invoice.notes != null && invoice.notes!.isNotEmpty) ...[
-                pw.Text(
-                  'Notes:',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                ),
-                pw.SizedBox(height: 4),
-                pw.Text(
-                  invoice.notes!,
-                  style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
-                ),
+                pw.SizedBox(height: 24),
+                pw.Divider(thickness: 2),
                 pw.SizedBox(height: 16),
-              ],
 
-              // Footer
-              pw.Spacer(),
-              pw.Divider(),
-              pw.SizedBox(height: 8),
-              pw.Center(
-                child: pw.Text(
-                  'Thank you for your business!',
-                  style: pw.TextStyle(
-                    fontStyle: pw.FontStyle.italic,
-                    color: PdfColors.grey600,
-                  ),
+                // Invoice Info
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        _buildInfoRow('التاريخ:', _formatDate(invoice.createdAt)),
+                        _buildInfoRow('الدفع:', _formatPaymentMethod(invoice.paymentMethod)),
+                        _buildInfoRow('الكاشير:', invoice.userName ?? '-'),
+                      ],
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text(
+                          'العميل:',
+                          style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.grey700,
+                          ),
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Text(
+                          invoice.customerName ?? 'زبون عادي',
+                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
+                pw.SizedBox(height: 24),
+              ],
+            );
+          }
+          // Continuation pages: compact header
+          return pw.Column(
+            children: [
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'فاتورة #${invoice.id} - صفحة ${context.pageNumber}',
+                    style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+                  ),
+                  pw.Text(
+                    storeName,
+                    style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 8),
+              pw.Divider(thickness: 1),
+              pw.SizedBox(height: 12),
+            ],
+          );
+        },
+        footer: (context) {
+          return pw.Column(
+            children: [
+              pw.Divider(color: PdfColors.grey300),
+              pw.SizedBox(height: 4),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    'صفحة ${context.pageNumber} من ${context.pagesCount}',
+                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+                  ),
+                  pw.Text(
+                    'شكراً لتعاملكم معنا!',
+                    style: pw.TextStyle(
+                      fontStyle: pw.FontStyle.italic,
+                      color: PdfColors.grey600,
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
               ),
             ],
           );
+        },
+        build: (context) {
+          return [
+            // Items Table
+            pw.TableHelper.fromTextArray(
+              border: pw.TableBorder.all(color: PdfColors.grey300),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blue),
+              headerStyle: pw.TextStyle(
+                color: PdfColors.white,
+                fontWeight: pw.FontWeight.bold,
+              ),
+              headerAlignment: pw.Alignment.center,
+              cellAlignment: pw.Alignment.centerRight,
+              cellPadding: const pw.EdgeInsets.all(8),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(1.5),
+                1: const pw.FlexColumnWidth(1.5),
+                2: const pw.FlexColumnWidth(1),
+                3: const pw.FlexColumnWidth(3),
+              },
+              headers: ['الإجمالي', 'سعر الوحدة', 'الكمية', 'المنتج'],
+              data: items.map((item) => [
+                '₪${item.totalPrice.toStringAsFixed(2)}',
+                '₪${item.unitPrice.toStringAsFixed(2)}',
+                '${item.quantity}',
+                item.productName,
+              ]).toList(),
+            ),
+            pw.SizedBox(height: 16),
+
+            // Totals
+            pw.Container(
+              alignment: pw.Alignment.centerLeft,
+              child: pw.Container(
+                width: 200,
+                child: pw.Column(
+                  children: [
+                    _buildTotalRow('المجموع الفرعي:', '₪${invoice.subtotal.toStringAsFixed(2)}'),
+                    if (invoice.discountAmount > 0)
+                      _buildTotalRow(
+                        'الخصم:',
+                        '-₪${invoice.discountAmount.toStringAsFixed(2)}',
+                        color: PdfColors.red,
+                      ),
+                    pw.Divider(thickness: 1),
+                    _buildTotalRow(
+                      'الإجمالي:',
+                      '₪${invoice.finalAmount.toStringAsFixed(2)}',
+                      bold: true,
+                      fontSize: 14,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 32),
+
+            // Notes
+            if (invoice.notes != null && invoice.notes!.isNotEmpty) ...[
+              pw.Text(
+                'ملاحظات:',
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                invoice.notes!,
+                style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+              ),
+            ],
+          ];
         },
       ),
     );

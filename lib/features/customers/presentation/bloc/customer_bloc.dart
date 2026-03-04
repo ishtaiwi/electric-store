@@ -134,9 +134,10 @@ class CustomerBloc extends Bloc<CustomerEvent, CustomerState> {
     CustomerLoadAll event,
     Emitter<CustomerState> emit,
   ) async {
-    // If we already have customers cached, re-emit them immediately
-    // (the repository has its own 1-minute cache, so this won't hit DB repeatedly)
-    if (_lastKnownCustomers.isNotEmpty && state is CustomerLoaded) {
+    // If we already have the full customer list cached, re-emit it immediately
+    // without hitting the DB (the repository has its own 1-minute cache too)
+    if (_lastKnownCustomers.isNotEmpty) {
+      emit(CustomerLoaded(_lastKnownCustomers));
       return;
     }
     emit(CustomerLoading());

@@ -69,10 +69,25 @@ class _InvoicesPageState extends State<InvoicesPage> {
   }
 
   void _loadInvoices() {
-    context.read<InvoiceBloc>().add(InvoiceLoadByDateRange(
-      start: _startDate!,
-      end: _endDate!,
-    ));
+    if (_startDate != null && _endDate != null) {
+      context.read<InvoiceBloc>().add(InvoiceLoadByDateRange(
+        start: _startDate!,
+        end: _endDate!,
+      ));
+    } else {
+      context.read<InvoiceBloc>().add(InvoiceRefresh());
+    }
+  }
+
+  void _loadAllInvoices() {
+    setState(() {
+      _startDate = null;
+      _endDate = null;
+      _selectedPaymentMethod = null;
+      _searchController.clear();
+      _searchQuery = '';
+    });
+    context.read<InvoiceBloc>().add(InvoiceRefresh());
   }
 
   void _showInvoiceDetails(Invoice invoice) {
@@ -211,13 +226,16 @@ class _InvoicesPageState extends State<InvoicesPage> {
               .toList();
         }
         
-        // Search filter (by invoice number or customer name)
+        // Search filter (by invoice number, ID, or customer name)
         if (_searchQuery.isNotEmpty) {
           final query = _searchQuery.toLowerCase();
           filteredInvoices = filteredInvoices.where((i) {
             final invoiceNum = i.invoiceNumber.toLowerCase();
             final customerName = (i.customerName ?? '').toLowerCase();
-            return invoiceNum.contains(query) || customerName.contains(query);
+            final invoiceId = i.id?.toString() ?? '';
+            return invoiceNum.contains(query) || 
+                   customerName.contains(query) ||
+                   invoiceId.contains(query);
           }).toList();
         }
 
@@ -283,6 +301,20 @@ class _InvoicesPageState extends State<InvoicesPage> {
                       _startDate != null && _endDate != null
                           ? '${_dateFormat.format(_startDate!)} - ${_dateFormat.format(_endDate!)}'
                           : LocalizationService().get('selectDateRange'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // Show All button
+                  OutlinedButton.icon(
+                    onPressed: _loadAllInvoices,
+                    icon: const Icon(Icons.all_inclusive),
+                    label: Text(LocalizationService().get('showAllInvoices')),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _startDate == null ? AppColors.primary : null,
+                      side: _startDate == null 
+                          ? const BorderSide(color: AppColors.primary, width: 2)
+                          : null,
                     ),
                   ),
                   const SizedBox(width: 8),

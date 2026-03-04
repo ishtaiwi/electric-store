@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/services/localization_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/di/injection_container.dart' as di;
+import '../../../../widgets/chatbot_widget.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../products/presentation/bloc/product_bloc.dart';
 import '../../../products/presentation/pages/products_page.dart';
@@ -19,6 +20,8 @@ import '../../../settings/presentation/pages/settings_page.dart';
 import '../../../backup/presentation/pages/backup_page.dart';
 import '../../../price_lists/presentation/bloc/price_list_bloc.dart';
 import '../../../price_lists/presentation/pages/price_lists_page.dart';
+import '../../../suppliers/presentation/bloc/supplier_bloc.dart';
+import '../../../suppliers/presentation/pages/suppliers_page.dart';
 import '../widgets/dashboard_content.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -39,6 +42,7 @@ class _DashboardPageState extends State<DashboardPage> {
   late final ReportBloc _reportBloc;
   late final ExpenseBloc _expenseBloc;
   late final PriceListBloc _priceListBloc;
+  late final SupplierBloc _supplierBloc;
   
   // All pages pre-built for IndexedStack (instant switching)
   late final List<Widget> _pages;
@@ -54,6 +58,7 @@ class _DashboardPageState extends State<DashboardPage> {
     _reportBloc = di.sl<ReportBloc>();
     _expenseBloc = di.sl<ExpenseBloc>();
     _priceListBloc = di.sl<PriceListBloc>();
+    _supplierBloc = di.sl<SupplierBloc>();
     
     // Build all pages once (widgets only, no data loading yet)
     _pages = _buildAllPages();
@@ -111,7 +116,12 @@ class _DashboardPageState extends State<DashboardPage> {
           _expenseBloc.add(ExpenseLoadAll());
         }
         break;
-      case 6: // Price Lists
+      case 6: // Suppliers
+        if (_supplierBloc.state is SupplierInitial) {
+          _supplierBloc.add(SupplierLoadAll());
+        }
+        break;
+      case 7: // Price Lists
         if (_priceListBloc.state is PriceListInitial) {
           _priceListBloc.add(PriceListLoadAll());
         }
@@ -157,14 +167,19 @@ class _DashboardPageState extends State<DashboardPage> {
         value: _expenseBloc,
         child: const ExpensesPage(),
       ),
-      // 6: Price Lists
+      // 6: Suppliers
+      BlocProvider.value(
+        value: _supplierBloc,
+        child: const SuppliersPage(),
+      ),
+      // 7: Price Lists
       BlocProvider.value(
         value: _priceListBloc,
         child: const PriceListsPage(),
       ),
-      // 7: Backup
+      // 8: Backup
       const BackupPage(),
-      // 8: Settings
+      // 9: Settings
       const SettingsPage(),
     ];
   }
@@ -195,6 +210,10 @@ class _DashboardPageState extends State<DashboardPage> {
       label: LocalizationService().get('expenses'),
     ),
     NavigationItem(
+      icon: Icons.local_shipping,
+      label: LocalizationService().get('suppliers'),
+    ),
+    NavigationItem(
       icon: Icons.list_alt,
       label: LocalizationService().get('priceLists'),
     ),
@@ -214,6 +233,12 @@ class _DashboardPageState extends State<DashboardPage> {
     final user = authState is AuthAuthenticated ? authState.user : null;
 
     return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => ChatbotOverlay.show(context),
+        backgroundColor: AppColors.primary,
+        tooltip: LocalizationService().get('aiAssistant'),
+        child: const Icon(Icons.smart_toy, color: Colors.white),
+      ),
       body: Row(
         children: [
           // Navigation Rail

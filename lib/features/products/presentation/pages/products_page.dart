@@ -1,6 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:data_table_2/data_table_2.dart';
+
 import '../../../../core/services/localization_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/product.dart';
@@ -17,12 +19,39 @@ class ProductsPage extends StatefulWidget {
 
 class _ProductsPageState extends State<ProductsPage> {
   final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode();
+  Timer? _debounceTimer;
   bool _showLowStock = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _searchFocusNode.requestFocus();
+    });
+  }
+
+  @override
   void dispose() {
+    _debounceTimer?.cancel();
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _debounceTimer?.cancel();
+    if (value.isEmpty) {
+      context.read<ProductBloc>().add(ProductLoadAll());
+      setState(() {});
+      return;
+    }
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        context.read<ProductBloc>().add(ProductSearch(value));
+      }
+    });
+    setState(() {});
   }
 
   void _showProductDialog({Product? product}) {
@@ -101,94 +130,133 @@ class _ProductsPageState extends State<ProductsPage> {
           isLoadingMore = state.isLoadingMore;
         }
 
-        return Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        return LayoutBuilder(
+          builder: (context, outerConstraints) {
+            final isNarrow = outerConstraints.maxWidth < 600;
+
+            return Padding(
+              padding: EdgeInsets.all(isNarrow ? 12 : 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    LocalizationService().get('products'),
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          LocalizationService().get('products'),
+                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                fontSize: isNarrow ? 20 : null,
+                              ),
                         ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () => _showProductDialog(),
-                    icon: const Icon(Icons.add),
-                    label: Text(LocalizationService().get('addProduct')),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // Filters
-              Row(
-                children: [
-                  // Search
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: LocalizationService().get('searchProducts'),
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  context.read<ProductBloc>().add(ProductLoadAll());
-                                },
-                              )
-                            : null,
                       ),
-                      onChanged: (value) {
-                        if (value.isEmpty) {
-                          context.read<ProductBloc>().add(ProductLoadAll());
-                        } else {
-                          context.read<ProductBloc>().add(ProductSearch(value));
-                        }
-                      },
-                    ),
+                      ElevatedButton.icon(
+                        onPressed: () => _showProductDialog(),
+                        icon: const Icon(Icons.add),
+                        label: isNarrow ? const SizedBox.shrink() : Text(LocalizationService().get('addProduct')),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 16),
+                  SizedBox(height: isNarrow ? 12 : 24),
 
-                  // Low stock filter
-                  FilterChip(
-                    label: Text(LocalizationService().get('lowStock')),
-                    selected: _showLowStock,
-                    onSelected: (selected) {
-                      setState(() => _showLowStock = selected);
-                      if (selected) {
-                        context.read<ProductBloc>().add(ProductLoadLowStock());
-                      } else {
-                        context.read<ProductBloc>().add(ProductLoadAll());
-                      }
-                    },
-                    selectedColor: AppColors.warning.withOpacity(0.2),
-                    checkmarkColor: AppColors.warning,
-                  ),
-                  const SizedBox(width: 8),
+                  // Filters
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      // Search
+                      SizedBox(
+                        width: isNarrow ? outerConstraints.maxWidth - 24 : outerConstraints.maxWidth * 0.5,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.grey[300]!),
+                          ),
+                          child: TextField(
+                            controller: _searchController,
+                            focusNode: _searchFocusNode,
+                            decoration: InputDecoration(
+                              hintText: LocalizationService().get('searchProducts'),
+                              hintStyle: TextStyle(color: Colors.grey[500]),
+                              prefixIcon: const Icon(Icons.search, size: 24),
+                              suffixIcon: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_searchController.text.isNotEmpty)
+                                    IconButton(
+                                      icon: const Icon(Icons.clear),
+                                      onPressed: () {
+                                        _debounceTimer?.cancel();
+                                        _searchController.clear();
+                                        context.read<ProductBloc>().add(ProductLoadAll());
+                                        setState(() {});
+                                      },
+                                    ),
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    margin: const EdgeInsets.only(right: 8),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(Icons.qr_code_scanner, color: AppColors.primary),
+                                  ),
+                                ],
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                            ),
+                            style: const TextStyle(fontSize: 16),
+                            onChanged: _onSearchChanged,
+                            onSubmitted: (value) {
+                              final state = context.read<ProductBloc>().state;
+                              if (state is ProductLoaded && state.products.isNotEmpty) {
+                                final product = state.products.firstWhere(
+                                  (p) => p.barcode == value,
+                                  orElse: () => state.products.first,
+                                );
+                                _showProductDialog(product: product);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
 
-                  // Refresh
-                  IconButton(
-                    icon: const Icon(Icons.refresh),
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() {
-                        _showLowStock = false;
-                      });
-                      context.read<ProductBloc>().add(ProductRefresh());
-                    },
-                    tooltip: LocalizationService().get('refresh'),
+                      // Low stock filter
+                      FilterChip(
+                        label: Text(LocalizationService().get('lowStock')),
+                        selected: _showLowStock,
+                        onSelected: (selected) {
+                          setState(() => _showLowStock = selected);
+                          if (selected) {
+                            context.read<ProductBloc>().add(ProductLoadLowStock());
+                          } else {
+                            context.read<ProductBloc>().add(ProductLoadAll());
+                          }
+                        },
+                        selectedColor: AppColors.warning.withOpacity(0.2),
+                        checkmarkColor: AppColors.warning,
+                      ),
+
+                      // Refresh
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {
+                            _showLowStock = false;
+                          });
+                          context.read<ProductBloc>().add(ProductRefresh());
+                        },
+                        tooltip: LocalizationService().get('refresh'),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
               // Products count
               Text(
@@ -203,77 +271,199 @@ class _ProductsPageState extends State<ProductsPage> {
               Expanded(
                 child: state is ProductLoading
                     ? _buildLoadingSkeleton()
-                    : Column(
-                        children: [
-                          Expanded(
-                            child: Card(
-                        child: DataTable2(
-                          columnSpacing: 16,
-                          horizontalMargin: 16,
-                          minWidth: 800,
-                          headingRowColor: WidgetStateProperty.all(
-                            AppColors.primary.withOpacity(0.1),
-                          ),
+                    : products.isEmpty
+                        ? _buildEmptyProductsState()
+                        : _buildProductsTable(products, hasMore, isLoadingMore),
+              ),
+            ],
+          ),
+        );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildProductsTable(List<Product> products, bool hasMore, bool isLoadingMore) {
+    final l10n = LocalizationService();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = constraints.maxWidth;
+        final isCompact = screenWidth < 800;
+        final isMedium = screenWidth >= 800 && screenWidth < 1100;
+
+        return Column(
+          children: [
+            Expanded(
+              child: Container(
+                margin: EdgeInsets.all(isCompact ? 8 : 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minWidth: constraints.maxWidth - (isCompact ? 16 : 32)),
+                      child: SingleChildScrollView(
+                        child: DataTable(
+                          headingRowColor: WidgetStateProperty.all(AppColors.primary.withOpacity(0.1)),
+                          dataRowMinHeight: 48,
+                          dataRowMaxHeight: 60,
+                          columnSpacing: isCompact ? 12 : isMedium ? 16 : 24,
+                          horizontalMargin: isCompact ? 8 : 16,
                           columns: [
-                            DataColumn2(label: Text(LocalizationService().get('name')), size: ColumnSize.L),
-                            DataColumn2(label: Text(LocalizationService().get('barcode')), size: ColumnSize.M),
-                            DataColumn2(label: Text(LocalizationService().get('notes')), size: ColumnSize.M),
-                            DataColumn2(label: Text(LocalizationService().get('price')), numeric: true),
-                            DataColumn2(label: Text(LocalizationService().get('cost')), numeric: true),
-                            DataColumn2(label: Text(LocalizationService().get('quantity')), numeric: true),
-                            DataColumn2(label: Text(LocalizationService().get('status')), size: ColumnSize.S),
-                            DataColumn2(label: Text(LocalizationService().get('actions')), size: ColumnSize.L),
+                            DataColumn(label: Text(l10n.get('name'), style: const TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text(l10n.get('barcode'), style: const TextStyle(fontWeight: FontWeight.bold))),
+                            if (!isCompact)
+                              DataColumn(label: Text(l10n.get('notes'), style: const TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text(l10n.get('price'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                            if (!isCompact)
+                              DataColumn(label: Text(l10n.get('cost'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                            DataColumn(label: Text(l10n.get('quantity'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
+                            if (!isCompact)
+                              DataColumn(label: Text(l10n.get('status'), style: const TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(label: Text(l10n.get('actions'), style: const TextStyle(fontWeight: FontWeight.bold))),
                           ],
                           rows: products.map((product) {
-                            final isLowStock = product.isLowStock;
                             final isOutOfStock = product.isOutOfStock;
+                            final isLowStock = product.isLowStock && !isOutOfStock;
 
-                            return DataRow2(
+                            return DataRow(
+                              color: WidgetStateProperty.resolveWith((states) {
+                                if (isOutOfStock) return Colors.grey[100];
+                                if (states.contains(WidgetState.hovered)) {
+                                  return AppColors.primary.withOpacity(0.05);
+                                }
+                                return null;
+                              }),
                               cells: [
-                                DataCell(Text(product.name)),
-                                DataCell(Text(product.barcode ?? '-')),
-                                DataCell(Text(product.note ?? '-')),
-                                DataCell(Text('₪${product.price.toStringAsFixed(2)}')),
-                                DataCell(Text('₪${product.costPrice.toStringAsFixed(2)}')),
+                                // Name
                                 DataCell(
-                                  Text(
-                                    '${product.quantity}',
-                                    style: TextStyle(
-                                      color: isOutOfStock
-                                          ? AppColors.error
-                                          : isLowStock
-                                              ? AppColors.warning
-                                              : null,
-                                      fontWeight: isLowStock || isOutOfStock
-                                          ? FontWeight.bold
-                                          : null,
+                                  ConstrainedBox(
+                                    constraints: BoxConstraints(maxWidth: isCompact ? 100 : isMedium ? 130 : 180),
+                                    child: Text(
+                                      product.name,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                        color: isOutOfStock ? Colors.grey : AppColors.textPrimary,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 ),
+                                // Barcode
                                 DataCell(
-                                  _buildStatusChip(product),
+                                  Text(
+                                    product.barcode ?? '-',
+                                    style: TextStyle(
+                                      color: isOutOfStock ? Colors.grey : Colors.grey[600],
+                                      fontSize: 13,
+                                    ),
+                                  ),
                                 ),
+                                // Notes (hidden on compact)
+                                if (!isCompact)
+                                  DataCell(
+                                    ConstrainedBox(
+                                      constraints: BoxConstraints(maxWidth: isMedium ? 80 : 120),
+                                      child: Text(
+                                        product.note ?? '-',
+                                        style: TextStyle(
+                                          color: isOutOfStock ? Colors.grey : Colors.grey[600],
+                                          fontSize: 13,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                // Price
+                                DataCell(
+                                  Text(
+                                    '₪${product.price.toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: isOutOfStock ? Colors.grey : AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                                // Cost (hidden on compact)
+                                if (!isCompact)
+                                  DataCell(
+                                    Text(
+                                      '₪${product.costPrice.toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                        color: isOutOfStock ? Colors.grey : Colors.grey[600],
+                                      ),
+                                    ),
+                                  ),
+                                // Quantity / Stock
+                                DataCell(
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: isOutOfStock
+                                          ? AppColors.error.withOpacity(0.1)
+                                          : isLowStock
+                                              ? AppColors.warning.withOpacity(0.1)
+                                              : AppColors.success.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      '${product.quantity}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: isOutOfStock
+                                            ? AppColors.error
+                                            : isLowStock
+                                                ? AppColors.warning
+                                                : AppColors.success,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Status (hidden on compact)
+                                if (!isCompact)
+                                  DataCell(_buildStatusChip(product)),
+                                // Actions
                                 DataCell(
                                   Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       IconButton(
-                                        icon: const Icon(Icons.add_box, size: 20),
+                                        icon: Icon(Icons.add_box, size: isCompact ? 18 : 20),
                                         onPressed: () => _showStockDialog(product),
-                                        tooltip: LocalizationService().get('adjustStock'),
+                                        tooltip: l10n.get('adjustStock'),
                                         color: AppColors.primary,
+                                        padding: isCompact ? const EdgeInsets.all(4) : null,
+                                        constraints: isCompact ? const BoxConstraints(minWidth: 32, minHeight: 32) : null,
                                       ),
                                       IconButton(
-                                        icon: const Icon(Icons.edit, size: 20),
+                                        icon: Icon(Icons.edit, size: isCompact ? 18 : 20),
                                         onPressed: () => _showProductDialog(product: product),
-                                        tooltip: LocalizationService().get('edit'),
+                                        tooltip: l10n.get('edit'),
                                         color: AppColors.info,
+                                        padding: isCompact ? const EdgeInsets.all(4) : null,
+                                        constraints: isCompact ? const BoxConstraints(minWidth: 32, minHeight: 32) : null,
                                       ),
                                       IconButton(
-                                        icon: const Icon(Icons.delete, size: 20),
+                                        icon: Icon(Icons.delete, size: isCompact ? 18 : 20),
                                         onPressed: () => _confirmDelete(product),
-                                        tooltip: LocalizationService().get('delete'),
+                                        tooltip: l10n.get('delete'),
                                         color: AppColors.error,
+                                        padding: isCompact ? const EdgeInsets.all(4) : null,
+                                        constraints: isCompact ? const BoxConstraints(minWidth: 32, minHeight: 32) : null,
                                       ),
                                     ],
                                   ),
@@ -281,39 +471,60 @@ class _ProductsPageState extends State<ProductsPage> {
                               ],
                             );
                           }).toList(),
-                          empty: Center(
-                            child: Text(LocalizationService().get('noProductsFound')),
-                          ),
                         ),
-                            ),
-                          ),
-                          // Load More Button
-                          if (hasMore)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 16),
-                              child: isLoadingMore
-                                  ? const SizedBox(
-                                      height: 40,
-                                      child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                    )
-                                  : FilledButton.icon(
-                                      onPressed: () => context.read<ProductBloc>().add(ProductLoadMore()),
-                                      icon: const Icon(Icons.expand_more),
-                                      label: Text(LocalizationService().get('loadMore')),
-                                      style: FilledButton.styleFrom(
-                                        backgroundColor: AppColors.primary,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                      ),
-                                    ),
-                            ),
-                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Load More Button
+            if (hasMore)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: isLoadingMore
+                    ? const SizedBox(
+                        height: 40,
+                        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                      )
+                    : FilledButton.icon(
+                        onPressed: () => context.read<ProductBloc>().add(ProductLoadMore()),
+                        icon: const Icon(Icons.expand_more),
+                        label: Text(l10n.get('loadMore')),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
                       ),
               ),
-            ],
-          ),
+          ],
         );
       },
+    );
+  }
+
+  Widget _buildEmptyProductsState() {
+    final l10n = LocalizationService();
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey[400]),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            l10n.get('noProductsFound'),
+            style: TextStyle(color: Colors.grey[500], fontSize: 16),
+          ),
+        ],
+      ),
     );
   }
 

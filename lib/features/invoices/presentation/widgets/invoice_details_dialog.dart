@@ -99,7 +99,8 @@ class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
           content: SizedBox(
             width: 600,
             height: 500,
-            child: Column(
+            child: SingleChildScrollView(
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Invoice header info
@@ -255,7 +256,8 @@ class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
                 const SizedBox(height: 8),
 
                 // Items list
-                Expanded(
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200),
                   child: state is InvoiceLoading
                       ? const Center(child: CircularProgressIndicator())
                       : items.isEmpty
@@ -435,6 +437,7 @@ class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
                 ),
               ],
             ),
+           ),
           ),
           actions: [
             TextButton(

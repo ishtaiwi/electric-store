@@ -69,7 +69,7 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: dbExists ? null : _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: _onConfigure,
@@ -139,6 +139,39 @@ class DatabaseHelper {
         await db.execute('ALTER TABLE invoices ADD COLUMN notes TEXT');
       }
     }
+    // Migration: v6 -> v7: Add suppliers, supplier_attachments tables and supplier_id to products
+    if (oldVersion < 7) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS suppliers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          phone TEXT,
+          address TEXT,
+          note TEXT,
+          created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS supplier_attachments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+          file_path TEXT NOT NULL,
+          file_name TEXT NOT NULL,
+          file_type TEXT NOT NULL DEFAULT 'pdf',
+          comment TEXT,
+          upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_supplier_attachments_supplier ON supplier_attachments(supplier_id)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name)');
+      // Add supplier_id FK column to products
+      final productInfo = await db.rawQuery('PRAGMA table_info(products)');
+      final hasSupplierIdCol = productInfo.any((col) => col['name'] == 'supplier_id');
+      if (!hasSupplierIdCol) {
+        await db.execute('ALTER TABLE products ADD COLUMN supplier_id INTEGER REFERENCES suppliers(id)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_products_supplier ON products(supplier_id)');
+      }
+    }
   }
 
   Future<void> _onConfigure(Database db) async {
@@ -150,6 +183,31 @@ class DatabaseHelper {
   }
 
   Future<void> _onCreate(Database db, int version) async {
+    // Suppliers table (must be before products for FK)
+    await db.execute('''
+      CREATE TABLE suppliers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone TEXT,
+        address TEXT,
+        note TEXT,
+        created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
+    // Supplier attachments table
+    await db.execute('''
+      CREATE TABLE supplier_attachments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+        file_path TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        file_type TEXT NOT NULL DEFAULT 'pdf',
+        comment TEXT,
+        upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
     // Products table
     await db.execute('''
       CREATE TABLE products (
@@ -161,6 +219,7 @@ class DatabaseHelper {
         cost_price REAL NOT NULL DEFAULT 0,
         note TEXT,
         supplier TEXT,
+        supplier_id INTEGER REFERENCES suppliers(id),
         min_stock INTEGER DEFAULT 5,
         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -373,6 +432,9 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_cancelled_sales_original ON cancelled_sales(original_sale_id)');
     await db.execute('CREATE INDEX idx_price_list_items_list ON price_list_items(price_list_id)');
     await db.execute('CREATE INDEX idx_price_lists_customer ON price_lists(customer_id)');
+    await db.execute('CREATE INDEX idx_suppliers_name ON suppliers(name)');
+    await db.execute('CREATE INDEX idx_supplier_attachments_supplier ON supplier_attachments(supplier_id)');
+    await db.execute('CREATE INDEX idx_products_supplier ON products(supplier_id)');
 
     // Insert default users
     await db.insert('users', {

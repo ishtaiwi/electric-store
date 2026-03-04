@@ -6,6 +6,8 @@ import '../services/security_service.dart';
 import '../services/audit_logger_service.dart';
 import '../services/error_handler_service.dart';
 import '../services/validation_service.dart';
+import '../services/smart_search_service.dart';
+import '../services/chatbot_service.dart';
 import '../../features/auth/data/repositories/auth_repository_impl.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
@@ -34,6 +36,9 @@ import '../../features/backup/domain/repositories/backup_repository.dart';
 import '../../features/price_lists/data/repositories/price_list_repository_impl.dart';
 import '../../features/price_lists/domain/repositories/price_list_repository.dart';
 import '../../features/price_lists/presentation/bloc/price_list_bloc.dart';
+import '../../features/suppliers/data/repositories/supplier_repository_impl.dart';
+import '../../features/suppliers/domain/repositories/supplier_repository.dart';
+import '../../features/suppliers/presentation/bloc/supplier_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -47,6 +52,10 @@ Future<void> init() async {
   sl.registerLazySingleton(() => ErrorHandlerService());
   sl.registerLazySingleton(() => ValidationService());
   sl.registerLazySingleton(() => PdfService());
+
+  // AI Services - Smart Search and Chatbot
+  sl.registerLazySingleton(() => SmartSearchService());
+  sl.registerLazySingleton(() => ChatbotService());
 
   // Initialize audit logger with database
   final auditLogger = sl<AuditLoggerService>();
@@ -63,6 +72,7 @@ Future<void> init() async {
   sl.registerLazySingleton<SettingsRepository>(() => SettingsRepositoryImpl(sl()));
   sl.registerLazySingleton<BackupRepository>(() => BackupRepositoryImpl(sl()));
   sl.registerLazySingleton<PriceListRepository>(() => PriceListRepositoryImpl(sl()));
+  sl.registerLazySingleton<SupplierRepository>(() => SupplierRepositoryImpl(sl()));
 
   // BLoCs - Using LazySingleton for all data blocs to cache data and enable instant navigation
   sl.registerFactory(() => AuthBloc(sl()));
@@ -73,4 +83,5 @@ Future<void> init() async {
   sl.registerLazySingleton(() => ReportBloc(sl()));
   sl.registerLazySingleton(() => ExpenseBloc(sl()));
   sl.registerLazySingleton(() => PriceListBloc(sl(), sl(), sl()));
+  sl.registerLazySingleton(() => SupplierBloc(sl()));
 }

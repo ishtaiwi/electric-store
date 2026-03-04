@@ -9,6 +9,7 @@ class Product extends Equatable {
   final double costPrice;
   final String? note;
   final String? supplier;
+  final int? supplierId;
   final int minStock;
   final DateTime? lastUpdated;
 
@@ -21,6 +22,7 @@ class Product extends Equatable {
     required this.costPrice,
     this.note,
     this.supplier,
+    this.supplierId,
     this.minStock = 5,
     this.lastUpdated,
   });
@@ -35,6 +37,7 @@ class Product extends Equatable {
       costPrice: (map['cost_price'] as num? ?? 0).toDouble(),
       note: map['note'] as String?,
       supplier: map['supplier'] as String?,
+      supplierId: map['supplier_id'] as int?,
       minStock: map['min_stock'] as int? ?? 5,
       lastUpdated: map['last_updated'] != null
           ? DateTime.parse(map['last_updated'] as String)
@@ -52,6 +55,7 @@ class Product extends Equatable {
       'cost_price': costPrice,
       'note': note,
       'supplier': supplier,
+      'supplier_id': supplierId,
       'min_stock': minStock,
     };
   }
@@ -65,6 +69,7 @@ class Product extends Equatable {
     double? costPrice,
     String? note,
     String? supplier,
+    int? supplierId,
     int? minStock,
     DateTime? lastUpdated,
   }) {
@@ -77,6 +82,7 @@ class Product extends Equatable {
       costPrice: costPrice ?? this.costPrice,
       note: note ?? this.note,
       supplier: supplier ?? this.supplier,
+      supplierId: supplierId ?? this.supplierId,
       minStock: minStock ?? this.minStock,
       lastUpdated: lastUpdated ?? this.lastUpdated,
     );
@@ -97,6 +103,7 @@ class Product extends Equatable {
         costPrice,
         note,
         supplier,
+        supplierId,
         minStock,
         lastUpdated,
       ];

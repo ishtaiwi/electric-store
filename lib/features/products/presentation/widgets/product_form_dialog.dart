@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/services/localization_service.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/di/injection_container.dart' as di;
+import '../../../suppliers/domain/entities/supplier.dart';
+import '../../../suppliers/domain/repositories/supplier_repository.dart';
 import '../../domain/entities/product.dart';
 import '../bloc/product_bloc.dart';
 
@@ -25,6 +28,9 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
   late final TextEditingController _noteController;
   late final TextEditingController _supplierController;
   late final TextEditingController _minStockController;
+  
+  List<Supplier> _suppliers = [];
+  int? _selectedSupplierId;
 
   bool get isEditing => widget.product != null;
 
@@ -47,6 +53,18 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
     _minStockController = TextEditingController(
       text: (widget.product?.minStock ?? 5).toString(),
     );
+    _selectedSupplierId = widget.product?.supplierId;
+    _loadSuppliers();
+  }
+
+  Future<void> _loadSuppliers() async {
+    try {
+      final repo = di.sl<SupplierRepository>();
+      final suppliers = await repo.getAllSuppliers();
+      if (mounted) {
+        setState(() => _suppliers = suppliers);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -73,6 +91,7 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
         quantity: int.tryParse(_quantityController.text) ?? 0,
         note: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
         supplier: _supplierController.text.trim().isEmpty ? null : _supplierController.text.trim(),
+        supplierId: _selectedSupplierId,
         minStock: int.tryParse(_minStockController.text) ?? 5,
       );
 
@@ -218,13 +237,35 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
                 ),
                 const SizedBox(height: 16),
 
-                // Supplier
-                TextFormField(
-                  controller: _supplierController,
+                // Supplier dropdown
+                DropdownButtonFormField<int?>(
+                  value: _selectedSupplierId,
                   decoration: InputDecoration(
                     labelText: l10n.get('supplier'),
-                    prefixIcon: const Icon(Icons.business),
+                    prefixIcon: const Icon(Icons.local_shipping),
                   ),
+                  items: [
+                    DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text(l10n.get('noSupplier')),
+                    ),
+                    ..._suppliers.map((s) => DropdownMenuItem<int?>(
+                      value: s.id,
+                      child: Text(s.name),
+                    )),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedSupplierId = value;
+                      // Also update text field for backward compatibility
+                      if (value != null) {
+                        final selected = _suppliers.firstWhere((s) => s.id == value);
+                        _supplierController.text = selected.name;
+                      } else {
+                        _supplierController.clear();
+                      }
+                    });
+                  },
                 ),
 
                 // Profit margin display
