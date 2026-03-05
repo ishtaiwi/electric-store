@@ -1,19 +1,35 @@
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/services/cache_service.dart';
 import '../../../../core/services/audit_logger_service.dart';
 import '../../domain/entities/expense.dart';
 import '../../domain/repositories/expense_repository.dart';
 
 class ExpenseRepositoryImpl implements ExpenseRepository {
   final DatabaseHelper _databaseHelper;
+  final CacheService _cache = CacheService();
   final AuditLoggerService _auditLogger = AuditLoggerService();
 
   ExpenseRepositoryImpl(this._databaseHelper);
 
+  void _invalidateCache() {
+    _cache.invalidate(CacheKeys.expenses);
+    _cache.invalidate(CacheKeys.expenseCategories);
+    _cache.invalidate(CacheKeys.dashboardStats);
+    _cache.invalidatePattern('expenses_');
+    _cache.invalidatePattern('report_profit');
+  }
+
   @override
   Future<List<Expense>> getAllExpenses() async {
+    final cached = _cache.get<List<Expense>>(CacheKeys.expenses);
+    if (cached != null) return cached;
+
     final db = await _databaseHelper.database;
     final result = await db.query('expenses', orderBy: 'expense_date DESC');
-    return result.map((map) => Expense.fromMap(map)).toList();
+    final expenses = result.map((map) => Expense.fromMap(map)).toList();
+
+    _cache.set(CacheKeys.expenses, expenses, duration: const Duration(minutes: 2));
+    return expenses;
   }
 
   @override
@@ -53,11 +69,17 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
 
   @override
   Future<List<String>> getAllCategories() async {
+    final cached = _cache.get<List<String>>(CacheKeys.expenseCategories);
+    if (cached != null) return cached;
+
     final db = await _databaseHelper.database;
     final result = await db.rawQuery(
       'SELECT DISTINCT category FROM expenses WHERE category IS NOT NULL ORDER BY category ASC',
     );
-    return result.map((map) => map['category'] as String).toList();
+    final categories = result.map((map) => map['category'] as String).toList();
+
+    _cache.set(CacheKeys.expenseCategories, categories, duration: CacheService.longDuration);
+    return categories;
   }
 
   @override
@@ -88,6 +110,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
       details: 'Created expense: ${expense.description.isNotEmpty ? expense.description : expense.category} - Amount: ${expense.amount}',
     );
     
+    _invalidateCache();
     return id;
   }
 
@@ -115,6 +138,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
       );
     }
     
+    _invalidateCache();
     return result;
   }
 
@@ -141,6 +165,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
       );
     }
     
+    _invalidateCache();
     return deleteResult;
   }
 }

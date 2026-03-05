@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/services/cache_service.dart';
 import '../../../invoices/domain/entities/invoice.dart';
 import '../../../invoices/domain/entities/sale_item.dart';
 import '../../domain/entities/cart_item.dart';
@@ -7,9 +8,17 @@ import '../../domain/repositories/sales_repository.dart';
 
 class SalesRepositoryImpl implements SalesRepository {
   final DatabaseHelper _databaseHelper;
+  final CacheService _cache = CacheService();
   final _uuid = const Uuid();
 
   SalesRepositoryImpl(this._databaseHelper);
+
+  /// Invalidate all caches affected by sales operations
+  void _invalidateSalesCaches() {
+    _cache.invalidateSalesRelated();
+    _cache.invalidateProductRelated();
+    _cache.invalidateCustomerRelated();
+  }
 
   @override
   Future<Invoice> createSale({
@@ -110,6 +119,8 @@ class SalesRepositoryImpl implements SalesRepository {
       }
     });
 
+    _invalidateSalesCaches();
+
     return Invoice(
       id: invoiceId,
       invoiceNumber: invoiceNumber,
@@ -141,7 +152,7 @@ class SalesRepositoryImpl implements SalesRepository {
     if (sales.isEmpty) return 0;
     final sale = sales.first;
 
-    return await db.transaction((txn) async {
+    final cancelResult = await db.transaction((txn) async {
       // Insert cancelled sale record
       await txn.insert('cancelled_sales', {
         'original_sale_id': saleId,
@@ -170,6 +181,9 @@ class SalesRepositoryImpl implements SalesRepository {
       // Delete original sale
       return await txn.delete('sales', where: 'id = ?', whereArgs: [saleId]);
     });
+
+    _invalidateSalesCaches();
+    return cancelResult;
   }
 
   @override

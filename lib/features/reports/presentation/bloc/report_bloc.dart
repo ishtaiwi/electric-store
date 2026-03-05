@@ -350,22 +350,25 @@ class ReportBloc extends Bloc<ReportEvent, ReportState> {
   ) async {
     emit(ReportLoading());
     try {
-      final dailySales = await _reportRepository.getDailySalesReport(event.startDate);
-      final monthlyTrend = await _reportRepository.getMonthlySalesTrend(event.startDate.year);
-      final profitReport = await _reportRepository.getProfitReport(event.startDate, event.endDate);
-      final inventoryReport = await _reportRepository.getInventoryReport();
-      final categorySales = await _reportRepository.getSalesByCategory(event.startDate, event.endDate);
-      final customerDebts = await _reportRepository.getCustomerDebtsReport();
-      final bestSelling = await _reportRepository.getBestSellingProducts(10);
+      // Run all independent queries in parallel for better performance
+      final results = await Future.wait([
+        _reportRepository.getDailySalesReport(event.startDate),
+        _reportRepository.getMonthlySalesTrend(event.startDate.year),
+        _reportRepository.getProfitReport(event.startDate, event.endDate),
+        _reportRepository.getInventoryReport(),
+        _reportRepository.getSalesByCategory(event.startDate, event.endDate),
+        _reportRepository.getCustomerDebtsReport(),
+        _reportRepository.getBestSellingProducts(10),
+      ]);
 
       emit(ReportLoaded(
-        dailySales: dailySales,
-        monthlyTrend: monthlyTrend,
-        profitReport: profitReport,
-        inventoryReport: inventoryReport,
-        categorySales: categorySales,
-        customerDebts: customerDebts,
-        bestSelling: bestSelling,
+        dailySales: results[0] as List<Map<String, dynamic>>,
+        monthlyTrend: results[1] as List<Map<String, dynamic>>,
+        profitReport: results[2] as Map<String, dynamic>,
+        inventoryReport: results[3] as List<Map<String, dynamic>>,
+        categorySales: results[4] as List<Map<String, dynamic>>,
+        customerDebts: results[5] as List<Map<String, dynamic>>,
+        bestSelling: results[6] as List<Map<String, dynamic>>,
       ));
     } catch (e) {
       emit(ReportError(e.toString()));

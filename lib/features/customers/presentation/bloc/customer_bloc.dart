@@ -224,14 +224,19 @@ class CustomerBloc extends Bloc<CustomerEvent, CustomerState> {
     CustomerUpdate event,
     Emitter<CustomerState> emit,
   ) async {
+    final customerId = event.customer.id;
+    if (customerId == null) {
+      emit(CustomerError(LocalizationService().get('customerNotFound')));
+      return;
+    }
     try {
       await _customerRepository.updateCustomer(event.customer);
       
       // Get the updated customer with computed balance from DB
-      final updatedCustomer = await _customerRepository.getCustomerById(event.customer.id!);
+      final updatedCustomer = await _customerRepository.getCustomerById(customerId);
       if (updatedCustomer != null) {
         _lastKnownCustomers = _lastKnownCustomers.map((c) {
-          return c.id == event.customer.id ? updatedCustomer : c;
+          return c.id == customerId ? updatedCustomer : c;
         }).toList();
       }
       

@@ -143,8 +143,11 @@ class SmartSearchService {
     final results = <Map<String, dynamic>>[];
     final seenIds = <int>{};
     
-    // Strategy 1: Exact token matches
+    // Strategy 1: Exact token matches (original tokens first)
     results.addAll(await _searchByTokens(db, tokens, seenIds));
+    
+    // Strategy 1b: Synonym-expanded token search
+    results.addAll(await _searchBySynonymTokens(db, tokens, seenIds));
     
     // Strategy 2: Fuzzy matching with original tokens
     results.addAll(await _searchFuzzy(db, originalTokens, seenIds));
@@ -160,7 +163,7 @@ class SmartSearchService {
       results.addAll(await _searchLoose(db, query, seenIds));
     }
 
-    // Rank and filter results
+    // Rank and filter results - use original tokens for proper boosting
     return _rankResults(results, tokens, wattage, size, color);
   }
 
@@ -181,6 +184,41 @@ class SmartSearchService {
         args,
       );
       
+      return _filterSeen(results, seenIds);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Strategy 1b: Search using synonym-expanded tokens
+  Future<List<Map<String, dynamic>>> _searchBySynonymTokens(
+    dynamic db,
+    List<String> tokens,
+    Set<int> seenIds,
+  ) async {
+    if (tokens.isEmpty) return [];
+    
+    // For each token, get all synonym expansions
+    final allConditions = <String>[];
+    final allArgs = <String>[];
+    
+    for (final token in tokens) {
+      final synonyms = _getSynonymExpansions(token);
+      if (synonyms.length > 1) {
+        // Only use synonym expansion if there are actual synonyms
+        final synConditions = synonyms.map((_) => 'name LIKE ?').join(' OR ');
+        allConditions.add('($synConditions)');
+        allArgs.addAll(synonyms.map((s) => '%$s%'));
+      }
+    }
+    
+    if (allConditions.isEmpty) return [];
+    
+    try {
+      final results = await db.rawQuery(
+        'SELECT * FROM products WHERE ${allConditions.join(' AND ')} LIMIT 30',
+        allArgs,
+      );
       return _filterSeen(results, seenIds);
     } catch (e) {
       return [];
@@ -427,16 +465,22 @@ class SmartSearchService {
       }
     });
     
-    // Replace Arabic synonyms
-    _arabicSynonyms.forEach((standard, synonyms) {
-      for (final syn in synonyms) {
-        if (normalized.contains(syn.toLowerCase())) {
-          normalized = normalized.replaceAll(syn.toLowerCase(), standard);
-        }
-      }
-    });
+    // NOTE: Do NOT replace synonyms here. Synonym expansion is handled
+    // in search strategies so exact matches are prioritized over synonyms.
     
     return normalized;
+  }
+
+  /// Get all synonym variants for a token (including the token itself)
+  List<String> _getSynonymExpansions(String token) {
+    final expansions = <String>{token};
+    for (final entry in _arabicSynonyms.entries) {
+      if (entry.key == token || entry.value.any((syn) => syn.toLowerCase() == token)) {
+        expansions.addAll(entry.value.map((s) => s.toLowerCase()));
+        expansions.add(entry.key);
+      }
+    }
+    return expansions.toList();
   }
 
   /// Tokenize query into searchable parts
@@ -521,11 +565,18 @@ class SmartSearchService {
       var score = (r['fuzzy_score'] as int?) ?? 50;
       final name = (r['name'] as String).toLowerCase();
       
-      // Boost for token matches
+      // Boost for exact token matches (original query terms)
       for (final token in tokens) {
         if (name.contains(token)) {
-          score += 15;
-          if (name.startsWith(token)) score += 10;
+          score += 30; // Strong boost for exact match on search term
+          if (name.startsWith(token)) score += 15;
+        } else {
+          // Check if match is via synonym - lower boost
+          final synonyms = _getSynonymExpansions(token);
+          final isSynonymMatch = synonyms.any((syn) => syn != token && name.contains(syn));
+          if (isSynonymMatch) {
+            score += 10; // Lower boost for synonym-only match
+          }
         }
       }
       
@@ -583,6 +634,32 @@ class SmartSearchService {
     ''', ['%$normalized%']);
     
     final suggestions = directResults.map((r) => r['name'] as String).toList();
+    
+    // Also search synonym expansions
+    if (suggestions.length < 10) {
+      final tokens = _tokenize(normalized);
+      for (final token in tokens) {
+        final synonyms = _getSynonymExpansions(token);
+        for (final syn in synonyms) {
+          if (syn == token) continue;
+          final synResults = await db.rawQuery('''
+            SELECT DISTINCT name FROM products 
+            WHERE name LIKE ? 
+            ORDER BY name 
+            LIMIT 5
+          ''', ['%$syn%']);
+          for (final r in synResults) {
+            final name = r['name'] as String;
+            if (!suggestions.contains(name)) {
+              suggestions.add(name);
+            }
+            if (suggestions.length >= 10) break;
+          }
+          if (suggestions.length >= 10) break;
+        }
+        if (suggestions.length >= 10) break;
+      }
+    }
     
     // Add fuzzy suggestions if needed
     if (suggestions.length < 5) {

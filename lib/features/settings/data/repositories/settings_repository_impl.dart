@@ -1,13 +1,22 @@
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/services/cache_service.dart';
 import '../../domain/repositories/settings_repository.dart';
 
 class SettingsRepositoryImpl implements SettingsRepository {
   final DatabaseHelper _databaseHelper;
+  final CacheService _cache = CacheService();
 
   SettingsRepositoryImpl(this._databaseHelper);
 
+  void _invalidateCache() {
+    _cache.invalidate(CacheKeys.settings);
+  }
+
   @override
   Future<Map<String, String>> getAllSettings() async {
+    final cached = _cache.get<Map<String, String>>(CacheKeys.settings);
+    if (cached != null) return cached;
+
     final db = await _databaseHelper.database;
     final result = await db.query('store_settings');
     
@@ -15,6 +24,8 @@ class SettingsRepositoryImpl implements SettingsRepository {
     for (final row in result) {
       settings[row['setting_key'] as String] = row['setting_value'] as String;
     }
+
+    _cache.set(CacheKeys.settings, settings, duration: CacheService.longDuration);
     return settings;
   }
 
@@ -50,6 +61,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
         'setting_value': value,
       });
     }
+    _invalidateCache();
   }
 
   @override
@@ -60,6 +72,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
       where: 'setting_key = ?',
       whereArgs: [key],
     );
+    _invalidateCache();
   }
 
   @override

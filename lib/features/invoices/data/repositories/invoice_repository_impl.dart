@@ -15,6 +15,8 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
   
   void _invalidateCache() {
     _cache.invalidate(_invoicesCacheKey);
+    _cache.invalidateSalesRelated();
+    _cache.invalidateCustomerRelated();
   }
 
   @override

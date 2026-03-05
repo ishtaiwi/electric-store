@@ -312,6 +312,8 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
         currentSearchQuery: '',
       ));
     } catch (e) {
+      // Restore previous state so cart is not lost, then signal error
+      emit(currentState);
       emit(SalesError(e.toString()));
     }
   }
@@ -375,19 +377,19 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
       // Use smart search for fuzzy matching and natural language understanding
       final smartResults = await _smartSearchService.smartSearchProducts(event.query);
       
-      // Convert smart search results to Product entities
+      // Convert smart search results to Product entities (safe casts)
       final products = smartResults.map((map) => Product(
         id: map['id'] as int?,
-        name: map['name'] as String,
+        name: (map['name'] as String?) ?? '',
         barcode: map['barcode'] as String?,
-        quantity: map['quantity'] as int? ?? 0,
+        quantity: (map['quantity'] as int?) ?? 0,
         price: (map['price'] as num?)?.toDouble() ?? 0.0,
         costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0.0,
         note: map['note'] as String?,
         supplier: map['supplier'] as String?,
-        minStock: map['min_stock'] as int? ?? 5,
+        minStock: (map['min_stock'] as int?) ?? 5,
         lastUpdated: map['last_updated'] != null
-            ? DateTime.tryParse(map['last_updated'] as String)
+            ? DateTime.tryParse(map['last_updated'].toString())
             : null,
       )).toList();
       
@@ -536,14 +538,11 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
     Emitter<SalesState> emit,
   ) {
     final currentState = _currentState;
-    emit(SalesReady(
-      products: currentState.products,
-      cart: currentState.cart,
-      discount: currentState.discount,
-      customerId: event.customerId,
-      paymentMethod: currentState.paymentMethod,
-      todayInvoices: currentState.todayInvoices,
-    ));
+    if (event.customerId == null) {
+      emit(currentState.copyWith(clearCustomerId: true));
+    } else {
+      emit(currentState.copyWith(customerId: event.customerId));
+    }
   }
 
   void _onSetPaymentMethod(
@@ -583,11 +582,23 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
       
       emit(SalesCheckoutSuccess(invoice));
       
-      // Reset state
-      final products = await _productRepository.getAllProducts();
-      final todayInvoices = await _invoiceRepository.getInvoicesToday();
-      emit(SalesReady(products: products, todayInvoices: todayInvoices));
+      // Reset state — use paginated load and wrap in separate try-catch
+      // so a refresh failure doesn't mask the successful checkout
+      try {
+        final products = await _productRepository.getProductsPaginated(limit: _pageSize, offset: 0);
+        final todayInvoices = await _invoiceRepository.getInvoicesToday();
+        emit(SalesReady(
+          products: products,
+          todayInvoices: todayInvoices,
+          hasMore: products.length >= _pageSize,
+        ));
+      } catch (_) {
+        // Checkout succeeded — just emit an empty ready state so UI is usable
+        emit(const SalesReady());
+      }
     } catch (e) {
+      // Checkout itself failed — restore cart so user doesn't lose data
+      emit(currentState);
       emit(SalesError(e.toString()));
     }
   }
@@ -600,8 +611,9 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
     try {
       final todayInvoices = await _invoiceRepository.getInvoicesToday();
       emit(currentState.copyWith(todayInvoices: todayInvoices));
-    } catch (e) {
-      emit(SalesError(e.toString()));
+    } catch (_) {
+      // Don't emit SalesError — this is a background refresh.
+      // Keep current state intact so the cart is preserved.
     }
   }
 }

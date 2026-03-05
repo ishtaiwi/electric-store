@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/services/cache_service.dart';
 import '../../../../core/services/audit_logger_service.dart';
 import '../../domain/entities/supplier.dart';
 import '../../domain/entities/supplier_attachment.dart';
@@ -9,9 +10,15 @@ import '../../domain/repositories/supplier_repository.dart';
 
 class SupplierRepositoryImpl implements SupplierRepository {
   final DatabaseHelper _databaseHelper;
+  final CacheService _cache = CacheService();
   final AuditLoggerService _auditLogger = AuditLoggerService();
 
   SupplierRepositoryImpl(this._databaseHelper);
+
+  void _invalidateCache() {
+    _cache.invalidate(CacheKeys.suppliers);
+    _cache.invalidatePattern('supplier_');
+  }
 
   // ─── Helper: Get attachments directory ───
   Future<Directory> _getAttachmentsDir() async {
@@ -27,13 +34,23 @@ class SupplierRepositoryImpl implements SupplierRepository {
 
   @override
   Future<List<Supplier>> getAllSuppliers() async {
+    final cached = _cache.get<List<Supplier>>(CacheKeys.suppliers);
+    if (cached != null) return cached;
+
     final db = await _databaseHelper.database;
     final result = await db.query('suppliers', orderBy: 'name ASC');
-    return result.map((map) => Supplier.fromMap(map)).toList();
+    final suppliers = result.map((map) => Supplier.fromMap(map)).toList();
+
+    _cache.set(CacheKeys.suppliers, suppliers, duration: const Duration(minutes: 5));
+    return suppliers;
   }
 
   @override
   Future<Supplier?> getSupplierById(int id) async {
+    final cacheKey = CacheKeys.supplierById(id);
+    final cached = _cache.get<Supplier>(cacheKey);
+    if (cached != null) return cached;
+
     final db = await _databaseHelper.database;
     final result = await db.query(
       'suppliers',
@@ -41,7 +58,10 @@ class SupplierRepositoryImpl implements SupplierRepository {
       whereArgs: [id],
     );
     if (result.isEmpty) return null;
-    return Supplier.fromMap(result.first);
+    final supplier = Supplier.fromMap(result.first);
+
+    _cache.set(cacheKey, supplier, duration: CacheService.shortDuration);
+    return supplier;
   }
 
   @override
@@ -68,6 +88,7 @@ class SupplierRepositoryImpl implements SupplierRepository {
       details: 'Created supplier: ${supplier.name}',
     );
 
+    _invalidateCache();
     return id;
   }
 
@@ -94,6 +115,7 @@ class SupplierRepositoryImpl implements SupplierRepository {
       );
     }
 
+    _invalidateCache();
     return result;
   }
 
@@ -135,6 +157,7 @@ class SupplierRepositoryImpl implements SupplierRepository {
       );
     }
 
+    _invalidateCache();
     return deleteResult;
   }
 

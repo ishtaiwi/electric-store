@@ -1,13 +1,19 @@
 import '../../../../core/database/database_helper.dart';
+import '../../../../core/services/cache_service.dart';
 import '../../domain/repositories/report_repository.dart';
 
 class ReportRepositoryImpl implements ReportRepository {
   final DatabaseHelper _databaseHelper;
+  final CacheService _cache = CacheService();
 
   ReportRepositoryImpl(this._databaseHelper);
 
   @override
   Future<Map<String, dynamic>> getDashboardStats() async {
+    // Check cache first (short TTL since dashboard needs fresh data)
+    final cached = _cache.get<Map<String, dynamic>>(CacheKeys.dashboardStats);
+    if (cached != null) return cached;
+
     final db = await _databaseHelper.database;
     final today = DateTime.now();
     final startOfDay = DateTime(today.year, today.month, today.day);
@@ -75,7 +81,7 @@ class ReportRepositoryImpl implements ReportRepository {
     final inventoryValue = results[7];
     final debts = results[8];
 
-    return {
+    final result = {
       'todaySales': (todaySales.first['total'] as num?)?.toDouble() ?? 0,
       'todayProfit': (todaySales.first['profit'] as num?)?.toDouble() ?? 0,
       'monthlySales': (monthlySales.first['total'] as num?)?.toDouble() ?? 0,
@@ -88,6 +94,10 @@ class ReportRepositoryImpl implements ReportRepository {
       'inventoryValue': (inventoryValue.first['value'] as num?)?.toDouble() ?? 0,
       'totalDebts': (debts.first['total'] as num?)?.toDouble() ?? 0,
     };
+
+    // Cache for 30 seconds — dashboard is shown frequently
+    _cache.set(CacheKeys.dashboardStats, result, duration: const Duration(seconds: 30));
+    return result;
   }
 
   @override
@@ -157,8 +167,11 @@ class ReportRepositoryImpl implements ReportRepository {
 
   @override
   Future<List<Map<String, dynamic>>> getInventoryReport() async {
+    final cached = _cache.get<List<Map<String, dynamic>>>(CacheKeys.inventoryReport);
+    if (cached != null) return cached;
+
     final db = await _databaseHelper.database;
-    return await db.rawQuery('''
+    final result = await db.rawQuery('''
       SELECT 
         id,
         name,
@@ -183,12 +196,18 @@ class ReportRepositoryImpl implements ReportRepository {
         END,
         name ASC
     ''');
+
+    _cache.set(CacheKeys.inventoryReport, result, duration: const Duration(minutes: 2));
+    return result;
   }
 
   @override
   Future<List<Map<String, dynamic>>> getCustomerDebtsReport() async {
+    final cached = _cache.get<List<Map<String, dynamic>>>(CacheKeys.customerDebtsReport);
+    if (cached != null) return cached;
+
     final db = await _databaseHelper.database;
-    return await db.rawQuery('''
+    final result = await db.rawQuery('''
       SELECT 
         c.id,
         c.name,
@@ -203,12 +222,19 @@ class ReportRepositoryImpl implements ReportRepository {
       HAVING total_debt > 0
       ORDER BY total_debt DESC
     ''');
+
+    _cache.set(CacheKeys.customerDebtsReport, result, duration: const Duration(minutes: 1));
+    return result;
   }
 
   @override
   Future<List<Map<String, dynamic>>> getBestSellingProducts(int limit) async {
+    final cacheKey = CacheKeys.bestSelling(limit);
+    final cached = _cache.get<List<Map<String, dynamic>>>(cacheKey);
+    if (cached != null) return cached;
+
     final db = await _databaseHelper.database;
-    return await db.rawQuery('''
+    final result = await db.rawQuery('''
       SELECT 
         p.id,
         p.name,
@@ -223,6 +249,9 @@ class ReportRepositoryImpl implements ReportRepository {
       ORDER BY total_sold DESC
       LIMIT ?
     ''', [limit]);
+
+    _cache.set(cacheKey, result, duration: const Duration(minutes: 2));
+    return result;
   }
 
   @override

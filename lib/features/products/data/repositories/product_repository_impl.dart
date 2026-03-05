@@ -141,8 +141,7 @@ class ProductRepositoryImpl implements ProductRepository {
     );
     
     // Invalidate product-related caches
-    _cache.invalidate(CacheKeys.products);
-    _cache.invalidate(CacheKeys.lowStockProducts);
+    _cache.invalidateProductRelated();
     return result;
   }
 
@@ -173,12 +172,11 @@ class ProductRepositoryImpl implements ProductRepository {
     }
     
     // Invalidate caches
-    _cache.invalidate(CacheKeys.products);
+    _cache.invalidateProductRelated();
     _cache.invalidate(CacheKeys.productById(product.id!));
     if (product.barcode != null) {
       _cache.invalidate(CacheKeys.productByBarcode(product.barcode!));
     }
-    _cache.invalidate(CacheKeys.lowStockProducts);
     return result;
   }
 
@@ -208,9 +206,8 @@ class ProductRepositoryImpl implements ProductRepository {
     }
     
     // Invalidate caches
-    _cache.invalidate(CacheKeys.products);
+    _cache.invalidateProductRelated();
     _cache.invalidate(CacheKeys.productById(id));
-    _cache.invalidate(CacheKeys.lowStockProducts);
     return result;
   }
 
@@ -222,9 +219,8 @@ class ProductRepositoryImpl implements ProductRepository {
       [quantity, DateTime.now().toIso8601String(), productId],
     );
     // Invalidate stock-related caches
-    _cache.invalidate(CacheKeys.products);
+    _cache.invalidateProductRelated();
     _cache.invalidate(CacheKeys.productById(productId));
-    _cache.invalidate(CacheKeys.lowStockProducts);
     return result;
   }
 
@@ -255,9 +251,8 @@ class ProductRepositoryImpl implements ProductRepository {
     });
     
     // Invalidate caches
-    _cache.invalidate(CacheKeys.products);
+    _cache.invalidateProductRelated();
     _cache.invalidate(CacheKeys.productById(productId));
-    _cache.invalidate(CacheKeys.lowStockProducts);
     
     return result;
   }

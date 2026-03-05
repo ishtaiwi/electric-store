@@ -8,9 +8,11 @@
 -- ============================================================
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
-PRAGMA cache_size = 10000;
+PRAGMA cache_size = -20000;  -- 20MB cache (negative = KiB)
 PRAGMA temp_store = MEMORY;
 PRAGMA foreign_keys = ON;
+PRAGMA mmap_size = 268435456;  -- 256MB memory-mapped I/O
+PRAGMA page_size = 4096;
 
 -- ============================================================
 -- TABLES
@@ -190,6 +192,7 @@ CREATE TABLE store_settings (
 -- INDEXES
 -- ============================================================
 
+-- Core indexes
 CREATE INDEX idx_products_barcode ON products(barcode);
 CREATE INDEX idx_products_name ON products(name);
 CREATE INDEX idx_sales_date ON sales(sale_date);
@@ -201,6 +204,29 @@ CREATE INDEX idx_invoices_date ON invoices(created_date);
 CREATE INDEX idx_invoices_customer ON invoices(customer_id);
 CREATE INDEX idx_cancelled_sales_date ON cancelled_sales(cancel_date);
 CREATE INDEX idx_cancelled_sales_original ON cancelled_sales(original_sale_id);
+
+-- Performance indexes (v8)
+CREATE INDEX idx_sales_invoice ON sales(invoice_id);
+CREATE INDEX idx_sales_customer ON sales(customer_id);
+CREATE INDEX idx_sales_product ON sales(product_id);
+CREATE INDEX idx_sales_date_invoice ON sales(sale_date, invoice_id);
+CREATE INDEX idx_invoices_sale_date ON invoices(sale_date);
+CREATE INDEX idx_invoices_number ON invoices(invoice_number);
+CREATE INDEX idx_invoices_payment ON invoices(payment_method);
+CREATE INDEX idx_invoices_customer_date ON invoices(customer_id, created_date);
+CREATE INDEX idx_products_quantity ON products(quantity);
+CREATE INDEX idx_products_low_stock ON products(quantity, min_stock);
+CREATE INDEX idx_products_search ON products(name, barcode);
+CREATE INDEX idx_expenses_date ON expenses(expense_date);
+CREATE INDEX idx_expenses_category ON expenses(category);
+CREATE INDEX idx_expenses_category_date ON expenses(category, expense_date);
+CREATE INDEX idx_cancelled_sales_product ON cancelled_sales(product_id);
+CREATE INDEX idx_inventory_adj_product ON inventory_adjustments(product_id);
+CREATE INDEX idx_inventory_adj_product_date ON inventory_adjustments(product_id, adjustment_date);
+CREATE INDEX idx_budget_year_month ON budget(year, month);
+CREATE INDEX idx_additional_income_date ON additional_income(income_date);
+CREATE INDEX idx_customers_name ON customers(name);
+CREATE INDEX idx_suppliers_phone ON suppliers(phone);
 
 -- ============================================================
 -- DEFAULT DATA

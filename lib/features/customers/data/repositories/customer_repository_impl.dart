@@ -39,6 +39,9 @@ class CustomerRepositoryImpl implements CustomerRepository {
   
   void _invalidateCache() {
     _cache.invalidate(_customersCacheKey);
+    _cache.invalidate(CacheKeys.customersWithDebt);
+    _cache.invalidate(CacheKeys.dashboardStats);
+    _cache.invalidate(CacheKeys.customerDebtsReport);
   }
 
   @override
@@ -75,6 +78,9 @@ class CustomerRepositoryImpl implements CustomerRepository {
 
   @override
   Future<List<Customer>> getCustomersWithDebt() async {
+    final cached = _cache.get<List<Customer>>(CacheKeys.customersWithDebt);
+    if (cached != null) return cached;
+
     final db = await _databaseHelper.database;
     final result = await db.rawQuery('''
       SELECT c.*, 
@@ -86,7 +92,9 @@ class CustomerRepositoryImpl implements CustomerRepository {
       ORDER BY balance DESC
     ''');
     
-    return result.map((map) => Customer.fromMap(map)).toList();
+    final customers = result.map((map) => Customer.fromMap(map)).toList();
+    _cache.set(CacheKeys.customersWithDebt, customers, duration: const Duration(minutes: 1));
+    return customers;
   }
 
   @override

@@ -69,7 +69,7 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: dbExists ? null : _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: _onConfigure,
@@ -172,14 +172,70 @@ class DatabaseHelper {
         await db.execute('CREATE INDEX IF NOT EXISTS idx_products_supplier ON products(supplier_id)');
       }
     }
+    // Migration: v7 -> v8: Add comprehensive indexes for performance
+    if (oldVersion < 8) {
+      await _createPerformanceIndexes(db);
+    }
+  }
+
+  /// Creates all performance-critical indexes.
+  /// Called from both _onCreate and migration v7->v8.
+  Future<void> _createPerformanceIndexes(Database db) async {
+    final indexes = [
+      // ── Sales table ──
+      'CREATE INDEX IF NOT EXISTS idx_sales_invoice ON sales(invoice_id)',
+      'CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales(customer_id)',
+      'CREATE INDEX IF NOT EXISTS idx_sales_product ON sales(product_id)',
+      'CREATE INDEX IF NOT EXISTS idx_sales_date_invoice ON sales(sale_date, invoice_id)',
+      // ── Invoices table ──
+      'CREATE INDEX IF NOT EXISTS idx_invoices_sale_date ON invoices(sale_date)',
+      'CREATE INDEX IF NOT EXISTS idx_invoices_number ON invoices(invoice_number)',
+      'CREATE INDEX IF NOT EXISTS idx_invoices_payment ON invoices(payment_method)',
+      'CREATE INDEX IF NOT EXISTS idx_invoices_customer_date ON invoices(customer_id, created_date)',
+      // ── Products table ──
+      'CREATE INDEX IF NOT EXISTS idx_products_quantity ON products(quantity)',
+      'CREATE INDEX IF NOT EXISTS idx_products_low_stock ON products(quantity, min_stock)',
+      'CREATE INDEX IF NOT EXISTS idx_products_search ON products(name, barcode)',
+      // ── Expenses table ──
+      'CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date)',
+      'CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category)',
+      'CREATE INDEX IF NOT EXISTS idx_expenses_category_date ON expenses(category, expense_date)',
+      // ── Cancelled sales table ──
+      'CREATE INDEX IF NOT EXISTS idx_cancelled_sales_product ON cancelled_sales(product_id)',
+      // ── Inventory adjustments table ──
+      'CREATE INDEX IF NOT EXISTS idx_inventory_adj_product ON inventory_adjustments(product_id)',
+      'CREATE INDEX IF NOT EXISTS idx_inventory_adj_product_date ON inventory_adjustments(product_id, adjustment_date)',
+      // ── Budget table ──
+      'CREATE INDEX IF NOT EXISTS idx_budget_year_month ON budget(year, month)',
+      // ── Additional income table ──
+      'CREATE INDEX IF NOT EXISTS idx_additional_income_date ON additional_income(income_date)',
+      // ── Customers table ──
+      'CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name)',
+      // ── Suppliers table ──
+      'CREATE INDEX IF NOT EXISTS idx_suppliers_phone ON suppliers(phone)',
+    ];
+    for (final sql in indexes) {
+      try {
+        await db.execute(sql);
+      } catch (_) {
+        // Index may already exist
+      }
+    }
+    // Run ANALYZE so the query planner uses the new indexes
+    try {
+      await db.execute('ANALYZE');
+    } catch (_) {}
   }
 
   Future<void> _onConfigure(Database db) async {
     await db.execute('PRAGMA journal_mode = WAL');
     await db.execute('PRAGMA synchronous = NORMAL');
-    await db.execute('PRAGMA cache_size = 10000');
+    await db.execute('PRAGMA cache_size = -20000');  // 20MB cache
     await db.execute('PRAGMA temp_store = MEMORY');
     await db.execute('PRAGMA foreign_keys = ON');
+    await db.execute('PRAGMA mmap_size = 268435456');  // 256MB memory-mapped I/O
+    await db.execute('PRAGMA page_size = 4096');
+    await db.execute('PRAGMA optimize');
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -418,7 +474,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // Create indexes
+    // Create core indexes
     await db.execute('CREATE INDEX idx_products_barcode ON products(barcode)');
     await db.execute('CREATE INDEX idx_products_name ON products(name)');
     await db.execute('CREATE INDEX idx_sales_date ON sales(sale_date)');
@@ -435,6 +491,9 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_suppliers_name ON suppliers(name)');
     await db.execute('CREATE INDEX idx_supplier_attachments_supplier ON supplier_attachments(supplier_id)');
     await db.execute('CREATE INDEX idx_products_supplier ON products(supplier_id)');
+
+    // Create performance indexes (sales, invoices, expenses, etc.)
+    await _createPerformanceIndexes(db);
 
     // Insert default users
     await db.insert('users', {
@@ -516,7 +575,7 @@ class DatabaseHelper {
   
   /// Check if test database exists in the project directory
   static Future<bool> testDatabaseExists() async {
-    final projectDbPath = 'c:\\Users\\osama\\Desktop\\electricalStore\\$testDbName';
+    const projectDbPath = 'c:\\Users\\osama\\Desktop\\electricalStore\\$testDbName';
     return await File(projectDbPath).exists();
   }
 }
