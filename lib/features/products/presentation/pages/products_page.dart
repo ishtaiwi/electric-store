@@ -5,7 +5,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/services/localization_service.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/di/injection_container.dart' as di;
 import '../../domain/entities/product.dart';
+import '../../domain/repositories/product_repository.dart';
 import '../bloc/product_bloc.dart';
 import '../widgets/product_form_dialog.dart';
 import '../widgets/stock_adjustment_dialog.dart';
@@ -52,6 +54,39 @@ class _ProductsPageState extends State<ProductsPage> {
       }
     });
     setState(() {});
+  }
+
+  /// Handle barcode input: look up by barcode and show the product dialog
+  Future<void> _handleBarcodeInput(String barcode) async {
+    _debounceTimer?.cancel();
+    final repo = di.sl<ProductRepository>();
+    final product = await repo.getProductByBarcode(barcode.trim());
+    if (!mounted) return;
+    if (product != null) {
+      _searchController.clear();
+      context.read<ProductBloc>().add(ProductLoadAll());
+      setState(() {});
+      _showProductDialog(product: product);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(child: Text('${LocalizationService().get('productNotFound')}\n$barcode')),
+            ],
+          ),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      _searchController.clear();
+      _searchFocusNode.requestFocus();
+      setState(() {});
+    }
   }
 
   void _showProductDialog({Product? product}) {
@@ -212,15 +247,9 @@ class _ProductsPageState extends State<ProductsPage> {
                             ),
                             style: const TextStyle(fontSize: 16),
                             onChanged: _onSearchChanged,
-                            onSubmitted: (value) {
-                              final state = context.read<ProductBloc>().state;
-                              if (state is ProductLoaded && state.products.isNotEmpty) {
-                                final product = state.products.firstWhere(
-                                  (p) => p.barcode == value,
-                                  orElse: () => state.products.first,
-                                );
-                                _showProductDialog(product: product);
-                              }
+                            onSubmitted: (value) async {
+                              if (value.trim().isEmpty) return;
+                              _handleBarcodeInput(value);
                             },
                           ),
                         ),

@@ -92,6 +92,7 @@ class SalesRepositoryImpl implements SalesRepository {
           'discount_amount': itemDiscount,
           'final_amount': itemFinal,
           'invoice_id': invoiceId,
+          if (item.note != null) 'note': item.note,
         });
 
         // Update product quantity only for real products (not custom items)
@@ -115,6 +116,7 @@ class SalesRepositoryImpl implements SalesRepository {
           discountAmount: itemDiscount,
           finalAmount: itemFinal,
           invoiceId: invoiceId,
+          note: item.note,
         ));
       }
     });

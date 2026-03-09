@@ -89,7 +89,8 @@ CREATE TABLE sales (
     customer_id INTEGER REFERENCES customers(id),
     discount_amount REAL DEFAULT 0,
     final_amount REAL NOT NULL,
-    invoice_id INTEGER REFERENCES invoices(id)
+    invoice_id INTEGER REFERENCES invoices(id),
+    note TEXT
 );
 
 -- Discounts table

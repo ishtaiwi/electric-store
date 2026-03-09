@@ -69,7 +69,7 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: dbExists ? null : _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: _onConfigure,
@@ -175,6 +175,14 @@ class DatabaseHelper {
     // Migration: v7 -> v8: Add comprehensive indexes for performance
     if (oldVersion < 8) {
       await _createPerformanceIndexes(db);
+    }
+    // Migration: v8 -> v9: Add note column to sales table
+    if (oldVersion < 9) {
+      final tableInfo = await db.rawQuery('PRAGMA table_info(sales)');
+      final hasColumn = tableInfo.any((col) => col['name'] == 'note');
+      if (!hasColumn) {
+        await db.execute('ALTER TABLE sales ADD COLUMN note TEXT');
+      }
     }
   }
 
@@ -341,7 +349,8 @@ class DatabaseHelper {
         customer_id INTEGER REFERENCES customers(id),
         discount_amount REAL DEFAULT 0,
         final_amount REAL NOT NULL,
-        invoice_id INTEGER REFERENCES invoices(id)
+        invoice_id INTEGER REFERENCES invoices(id),
+        note TEXT
       )
     ''');
 

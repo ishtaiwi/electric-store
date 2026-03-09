@@ -15,6 +15,7 @@ class SaleItem extends Equatable {
   final double discountAmount;
   final double finalAmount;
   final int? invoiceId;
+  final String? note;
 
   const SaleItem({
     this.id,
@@ -31,6 +32,7 @@ class SaleItem extends Equatable {
     this.discountAmount = 0,
     required this.finalAmount,
     this.invoiceId,
+    this.note,
   });
 
   // Convenience getters for UI
@@ -55,6 +57,7 @@ class SaleItem extends Equatable {
       discountAmount: (map['discount_amount'] as num?)?.toDouble() ?? 0,
       finalAmount: (map['final_amount'] as num).toDouble(),
       invoiceId: map['invoice_id'] as int?,
+      note: map['note'] as String?,
     );
   }
 
@@ -73,6 +76,7 @@ class SaleItem extends Equatable {
       'discount_amount': discountAmount,
       'final_amount': finalAmount,
       'invoice_id': invoiceId,
+      if (note != null) 'note': note,
     };
   }
 
@@ -91,6 +95,8 @@ class SaleItem extends Equatable {
     double? discountAmount,
     double? finalAmount,
     int? invoiceId,
+    String? note,
+    bool clearNote = false,
   }) {
     return SaleItem(
       id: id ?? this.id,
@@ -107,6 +113,7 @@ class SaleItem extends Equatable {
       discountAmount: discountAmount ?? this.discountAmount,
       finalAmount: finalAmount ?? this.finalAmount,
       invoiceId: invoiceId ?? this.invoiceId,
+      note: clearNote ? null : (note ?? this.note),
     );
   }
 
@@ -126,5 +133,6 @@ class SaleItem extends Equatable {
         discountAmount,
         finalAmount,
         invoiceId,
+        note,
       ];
 }

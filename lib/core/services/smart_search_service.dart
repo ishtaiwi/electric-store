@@ -143,6 +143,9 @@ class SmartSearchService {
     final results = <Map<String, dynamic>>[];
     final seenIds = <int>{};
     
+    // Strategy 0: Exact barcode match (highest priority)
+    results.addAll(await _searchByBarcode(db, query.trim(), seenIds));
+    
     // Strategy 1: Exact token matches (original tokens first)
     results.addAll(await _searchByTokens(db, tokens, seenIds));
     
@@ -167,6 +170,33 @@ class SmartSearchService {
     return _rankResults(results, tokens, wattage, size, color);
   }
 
+  /// Strategy 0: Exact barcode match
+  Future<List<Map<String, dynamic>>> _searchByBarcode(
+    dynamic db,
+    String query,
+    Set<int> seenIds,
+  ) async {
+    if (query.isEmpty) return [];
+    
+    try {
+      // Exact barcode match
+      final results = await db.rawQuery(
+        'SELECT * FROM products WHERE barcode = ? LIMIT 1',
+        [query],
+      );
+      if (results.isNotEmpty) return _filterSeen(results, seenIds);
+      
+      // Partial barcode match (barcode contains query or query contains barcode)
+      final partialResults = await db.rawQuery(
+        'SELECT * FROM products WHERE barcode LIKE ? LIMIT 10',
+        ['%$query%'],
+      );
+      return _filterSeen(partialResults, seenIds);
+    } catch (e) {
+      return [];
+    }
+  }
+
   /// Strategy 1: Token-based search
   Future<List<Map<String, dynamic>>> _searchByTokens(
     dynamic db,
@@ -175,8 +205,8 @@ class SmartSearchService {
   ) async {
     if (tokens.isEmpty) return [];
     
-    final conditions = tokens.map((_) => 'name LIKE ?').join(' AND ');
-    final args = tokens.map((t) => '%$t%').toList();
+    final conditions = tokens.map((_) => '(name LIKE ? OR barcode LIKE ?)').join(' AND ');
+    final args = tokens.expand((t) => ['%$t%', '%$t%']).toList();
     
     try {
       final results = await db.rawQuery(
@@ -420,8 +450,8 @@ class SmartSearchService {
     final tokens = query.split(RegExp(r'\s+')).where((w) => w.length >= 3).toList();
     if (tokens.isEmpty) return [];
     
-    final conditions = tokens.map((_) => 'name LIKE ?').join(' OR ');
-    final args = tokens.map((t) => '%${t.substring(0, 3)}%').toList();
+    final conditions = tokens.map((_) => '(name LIKE ? OR barcode LIKE ?)').join(' OR ');
+    final args = tokens.map((t) => '%${t.substring(0, 3)}%').expand((t) => [t, t]).toList();
     
     try {
       final results = await db.rawQuery(

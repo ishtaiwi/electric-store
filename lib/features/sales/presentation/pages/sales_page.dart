@@ -13,6 +13,7 @@ import '../../../customers/domain/repositories/customer_repository.dart';
 import '../../../invoices/presentation/bloc/invoice_bloc.dart';
 import '../../../invoices/domain/repositories/invoice_repository.dart';
 import '../../../products/domain/entities/product.dart';
+import '../../../products/domain/repositories/product_repository.dart';
 import '../../../products/presentation/bloc/product_bloc.dart';
 import '../../domain/entities/cart_item.dart';
 import '../bloc/sales_bloc.dart';
@@ -73,6 +74,56 @@ class _SalesPageState extends State<SalesPage> {
       }
     });
     setState(() {});
+  }
+
+  /// Handle barcode input: look up by barcode and auto-add to cart
+  Future<void> _handleBarcodeInput(String barcode) async {
+    _debounceTimer?.cancel();
+    final repo = di.sl<ProductRepository>();
+    final product = await repo.getProductByBarcode(barcode.trim());
+    if (!mounted) return;
+    final l10n = LocalizationService();
+    if (product != null && product.quantity > 0) {
+      _addToCart(product);
+    } else if (product != null && product.quantity <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(child: Text('${l10n.get('productOutOfStock')}\n${product.name}')),
+            ],
+          ),
+          backgroundColor: AppColors.warning,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      _searchController.clear();
+      _searchFocusNode.requestFocus();
+      setState(() {});
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(child: Text('${l10n.get('productNotFound')}\n$barcode')),
+            ],
+          ),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      _searchController.clear();
+      _searchFocusNode.requestFocus();
+      setState(() {});
+    }
   }
 
   void _addToCart(Product product) {
@@ -380,14 +431,9 @@ class _SalesPageState extends State<SalesPage> {
                               ),
                               style: const TextStyle(fontSize: 16),
                               onChanged: _onSearchChanged,
-                              onSubmitted: (value) {
-                                final product = products.firstWhere(
-                                  (p) => p.barcode == value,
-                                  orElse: () => products.isNotEmpty ? products.first : const Product(name: '', quantity: 0, price: 0, costPrice: 0),
-                                );
-                                if (product.id != null && product.quantity > 0) {
-                                  _addToCart(product);
-                                }
+                              onSubmitted: (value) async {
+                                if (value.trim().isEmpty) return;
+                                _handleBarcodeInput(value);
                               },
                             ),
                           ),
@@ -499,6 +545,7 @@ class _SalesPageState extends State<SalesPage> {
     final nameController = TextEditingController();
     final priceController = TextEditingController();
     final quantityController = TextEditingController(text: '1');
+    final noteController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
     showDialog(
@@ -606,16 +653,35 @@ class _SalesPageState extends State<SalesPage> {
                     }
                     return null;
                   },
+                  textInputAction: TextInputAction.next,
+                  onFieldSubmitted: (_) {
+                    // Move focus to note field
+                  },
+                ),
+                const SizedBox(height: 16),
+                // Note (optional)
+                TextFormField(
+                  controller: noteController,
+                  decoration: InputDecoration(
+                    labelText: '${l10n.get('notes')} (${l10n.get('optional')})',
+                    hintText: l10n.get('enterNotes'),
+                    prefixIcon: const Icon(Icons.note_outlined),
+                    filled: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  maxLines: 2,
                   textInputAction: TextInputAction.done,
                   onFieldSubmitted: (_) {
                     if (formKey.currentState!.validate()) {
                       final name = nameController.text.trim();
                       final price = double.parse(priceController.text);
                       final quantity = int.parse(quantityController.text);
+                      final note = noteController.text.trim().isEmpty ? null : noteController.text.trim();
                       context.read<SalesBloc>().add(SalesAddCustomToCart(
                         name: name,
                         price: price,
                         quantity: quantity,
+                        note: note,
                       ));
                       Navigator.pop(dialogContext);
                     }
@@ -637,10 +703,12 @@ class _SalesPageState extends State<SalesPage> {
                 final name = nameController.text.trim();
                 final price = double.parse(priceController.text);
                 final quantity = int.parse(quantityController.text);
+                final note = noteController.text.trim().isEmpty ? null : noteController.text.trim();
                 context.read<SalesBloc>().add(SalesAddCustomToCart(
                   name: name,
                   price: price,
                   quantity: quantity,
+                  note: note,
                 ));
                 Navigator.pop(dialogContext);
               }
@@ -949,6 +1017,23 @@ class _SalesPageState extends State<SalesPage> {
                         ),
                       ],
                     ),
+                    if (item.note != null && item.note!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(Icons.note_outlined, size: 12, color: Colors.grey[500]),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              item.note!,
+                              style: TextStyle(fontSize: 11, color: Colors.grey[600], fontStyle: FontStyle.italic),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Row(
                       children: [

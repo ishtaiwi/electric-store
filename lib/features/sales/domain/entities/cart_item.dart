@@ -6,12 +6,14 @@ class CartItem extends Equatable {
   final int quantity;
   final double discount;
   final double? customPrice; // Allow custom price override
+  final String? note;
 
   const CartItem({
     required this.product,
     this.quantity = 1,
     this.discount = 0,
     this.customPrice,
+    this.note,
   });
 
   /// The effective unit price (custom price or product price)
@@ -28,15 +30,18 @@ class CartItem extends Equatable {
     double? discount,
     double? customPrice,
     bool clearCustomPrice = false,
+    String? note,
+    bool clearNote = false,
   }) {
     return CartItem(
       product: product ?? this.product,
       quantity: quantity ?? this.quantity,
       discount: discount ?? this.discount,
       customPrice: clearCustomPrice ? null : (customPrice ?? this.customPrice),
+      note: clearNote ? null : (note ?? this.note),
     );
   }
 
   @override
-  List<Object?> get props => [product, quantity, discount, customPrice];
+  List<Object?> get props => [product, quantity, discount, customPrice, note];
 }

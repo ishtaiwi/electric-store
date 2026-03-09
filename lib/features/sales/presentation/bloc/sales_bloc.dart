@@ -46,15 +46,17 @@ class SalesAddCustomToCart extends SalesEvent {
   final String name;
   final double price;
   final int quantity;
+  final String? note;
 
   const SalesAddCustomToCart({
     required this.name,
     required this.price,
     this.quantity = 1,
+    this.note,
   });
 
   @override
-  List<Object?> get props => [name, price, quantity];
+  List<Object?> get props => [name, price, quantity, note];
 }
 
 class SalesRemoveFromCart extends SalesEvent {
@@ -466,7 +468,7 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
       note: 'custom',
     );
 
-    cart.add(CartItem(product: customProduct, quantity: event.quantity));
+    cart.add(CartItem(product: customProduct, quantity: event.quantity, note: event.note));
     emit(currentState.copyWith(cart: cart));
   }
 
