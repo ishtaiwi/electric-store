@@ -105,6 +105,25 @@ class InvoiceUpdateNotes extends InvoiceEvent {
   List<Object?> get props => [invoiceId, notes];
 }
 
+class InvoiceFullUpdate extends InvoiceEvent {
+  final int invoiceId;
+  final List<SaleItem> updatedItems;
+  final double discountAmount;
+  final String? paymentMethod;
+  final double? paidAmount;
+
+  const InvoiceFullUpdate({
+    required this.invoiceId,
+    required this.updatedItems,
+    this.discountAmount = 0,
+    this.paymentMethod,
+    this.paidAmount,
+  });
+
+  @override
+  List<Object?> get props => [invoiceId, updatedItems, discountAmount, paymentMethod, paidAmount];
+}
+
 /// Fast update: adds invoice to list without DB reload
 class InvoiceAdded extends InvoiceEvent {
   final Invoice invoice;
@@ -219,6 +238,7 @@ class InvoiceBloc extends Bloc<InvoiceEvent, InvoiceState> {
     on<InvoiceSavePdf>(_onSavePdf);
     on<InvoiceUpdatePaidAmount>(_onUpdatePaidAmount);
     on<InvoiceUpdateNotes>(_onUpdateNotes);
+    on<InvoiceFullUpdate>(_onFullUpdate);
     on<InvoiceAdded>(_onInvoiceAdded);
     on<InvoiceUpdated>(_onInvoiceUpdated);
   }
@@ -456,6 +476,37 @@ class InvoiceBloc extends Bloc<InvoiceEvent, InvoiceState> {
       emit(InvoiceOperationSuccess(LocalizationService().get('notesSaved')));
       // Re-emit list to keep UI showing after success state
       emit(InvoiceListLoaded(List.from(_lastKnownInvoices)));
+    } catch (e) {
+      emit(InvoiceError(e.toString()));
+    }
+  }
+
+  Future<void> _onFullUpdate(
+    InvoiceFullUpdate event,
+    Emitter<InvoiceState> emit,
+  ) async {
+    try {
+      final updatedInvoice = await _invoiceRepository.updateInvoice(
+        invoiceId: event.invoiceId,
+        updatedItems: event.updatedItems,
+        discountAmount: event.discountAmount,
+        paymentMethod: event.paymentMethod,
+        paidAmount: event.paidAmount,
+      );
+
+      if (updatedInvoice != null) {
+        // Update in persistent list
+        final index = _lastKnownInvoices.indexWhere((inv) => inv.id == event.invoiceId);
+        if (index != -1) {
+          _lastKnownInvoices[index] = updatedInvoice;
+        }
+
+        emit(InvoiceListLoaded(List.from(_lastKnownInvoices)));
+        emit(InvoiceOperationSuccess(LocalizationService().get('invoiceUpdated')));
+        emit(InvoiceListLoaded(List.from(_lastKnownInvoices)));
+      } else {
+        emit(InvoiceError(LocalizationService().get('invoiceNotFound')));
+      }
     } catch (e) {
       emit(InvoiceError(e.toString()));
     }

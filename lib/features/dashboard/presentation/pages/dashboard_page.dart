@@ -8,7 +8,9 @@ import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../products/presentation/bloc/product_bloc.dart';
 import '../../../products/presentation/pages/products_page.dart';
 import '../../../sales/presentation/bloc/sales_bloc.dart';
+import '../../../sales/presentation/bloc/all_sales_bloc.dart';
 import '../../../sales/presentation/pages/sales_page.dart';
+import '../../../sales/presentation/pages/all_sales_page.dart';
 import '../../../customers/presentation/bloc/customer_bloc.dart';
 import '../../../customers/presentation/pages/customers_page.dart';
 import '../../../invoices/presentation/bloc/invoice_bloc.dart';
@@ -43,6 +45,7 @@ class _DashboardPageState extends State<DashboardPage> {
   late final ExpenseBloc _expenseBloc;
   late final PriceListBloc _priceListBloc;
   late final SupplierBloc _supplierBloc;
+  late final AllSalesBloc _allSalesBloc;
   
   // All pages pre-built for IndexedStack (instant switching)
   late final List<Widget> _pages;
@@ -59,6 +62,7 @@ class _DashboardPageState extends State<DashboardPage> {
     _expenseBloc = di.sl<ExpenseBloc>();
     _priceListBloc = di.sl<PriceListBloc>();
     _supplierBloc = di.sl<SupplierBloc>();
+    _allSalesBloc = di.sl<AllSalesBloc>();
     
     // Build all pages once (widgets only, no data loading yet)
     _pages = _buildAllPages();
@@ -96,32 +100,37 @@ class _DashboardPageState extends State<DashboardPage> {
           _customerBloc.add(CustomerLoadAll());
         }
         break;
-      case 2: // Products
+      case 2: // All Sales
+        if (_allSalesBloc.state is AllSalesInitial) {
+          _allSalesBloc.add(AllSalesLoad());
+        }
+        break;
+      case 3: // Products
         if (_productBloc.state is ProductInitial) {
           _productBloc.add(ProductLoadAll());
         }
         break;
-      case 3: // Customers
+      case 4: // Customers
         if (_customerBloc.state is CustomerInitial) {
           _customerBloc.add(CustomerLoadAll());
         }
         break;
-      case 4: // Invoices
+      case 5: // Invoices
         if (_invoiceBloc.state is InvoiceInitial) {
           _invoiceBloc.add(InvoiceLoadAll());
         }
         break;
-      case 5: // Expenses
+      case 6: // Expenses
         if (_expenseBloc.state is ExpenseInitial) {
           _expenseBloc.add(ExpenseLoadAll());
         }
         break;
-      case 6: // Suppliers
+      case 7: // Suppliers
         if (_supplierBloc.state is SupplierInitial) {
           _supplierBloc.add(SupplierLoadAll());
         }
         break;
-      case 7: // Price Lists
+      case 8: // Price Lists
         if (_priceListBloc.state is PriceListInitial) {
           _priceListBloc.add(PriceListLoadAll());
         }
@@ -147,39 +156,44 @@ class _DashboardPageState extends State<DashboardPage> {
         value: _salesBloc,
         child: const SalesPage(),
       ),
-      // 2: Products
+      // 2: All Sales
+      BlocProvider.value(
+        value: _allSalesBloc,
+        child: const AllSalesPage(),
+      ),
+      // 3: Products
       BlocProvider.value(
         value: _productBloc,
         child: const ProductsPage(),
       ),
-      // 3: Customers
+      // 4: Customers
       BlocProvider.value(
         value: _customerBloc,
         child: const CustomersPage(),
       ),
-      // 4: Invoices
+      // 5: Invoices
       BlocProvider.value(
         value: _invoiceBloc,
         child: const InvoicesPage(),
       ),
-      // 5: Expenses
+      // 6: Expenses
       BlocProvider.value(
         value: _expenseBloc,
         child: const ExpensesPage(),
       ),
-      // 6: Suppliers
+      // 7: Suppliers
       BlocProvider.value(
         value: _supplierBloc,
         child: const SuppliersPage(),
       ),
-      // 7: Price Lists
+      // 8: Price Lists
       BlocProvider.value(
         value: _priceListBloc,
         child: const PriceListsPage(),
       ),
-      // 8: Backup
+      // 9: Backup
       const BackupPage(),
-      // 9: Settings
+      // 10: Settings
       const SettingsPage(),
     ];
   }
@@ -192,6 +206,10 @@ class _DashboardPageState extends State<DashboardPage> {
     NavigationItem(
       icon: Icons.point_of_sale,
       label: LocalizationService().get('sales'),
+    ),
+    NavigationItem(
+      icon: Icons.receipt,
+      label: LocalizationService().get('allSales'),
     ),
     NavigationItem(
       icon: Icons.inventory_2,

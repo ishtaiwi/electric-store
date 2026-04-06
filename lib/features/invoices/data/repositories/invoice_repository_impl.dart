@@ -17,6 +17,7 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
     _cache.invalidate(_invoicesCacheKey);
     _cache.invalidateSalesRelated();
     _cache.invalidateCustomerRelated();
+    _cache.invalidateProductRelated();
   }
 
   @override
@@ -188,6 +189,113 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
     
     _invalidateCache();
     return result;
+  }
+
+  @override
+  Future<Invoice?> updateInvoice({
+    required int invoiceId,
+    required List<SaleItem> updatedItems,
+    double discountAmount = 0,
+    String? paymentMethod,
+    double? paidAmount,
+  }) async {
+    final db = await _databaseHelper.database;
+
+    // Get existing invoice
+    final invoiceResult = await db.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
+    if (invoiceResult.isEmpty) return null;
+
+    final oldInvoice = Invoice.fromMap(invoiceResult.first);
+
+    // Get existing sale items for this invoice
+    final oldSalesResult = await db.query('sales', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+    final oldItems = oldSalesResult.map((m) => SaleItem.fromMap(m)).toList();
+
+    // Calculate new totals
+    double newTotalAmount = 0;
+    double newTotalProfit = 0;
+    for (final item in updatedItems) {
+      newTotalAmount += item.totalAmount;
+      newTotalProfit += item.profit;
+    }
+    final newFinalAmount = newTotalAmount - discountAmount;
+    newTotalProfit -= discountAmount;
+    final newPaymentMethod = paymentMethod ?? oldInvoice.paymentMethod;
+    final newPaidAmount = paidAmount ?? oldInvoice.paidAmount;
+
+    await db.transaction((txn) async {
+      // 1. Restore inventory for ALL old items (return quantities to stock)
+      for (final oldItem in oldItems) {
+        if (oldItem.productId != null) {
+          await txn.rawUpdate(
+            'UPDATE products SET quantity = quantity + ?, last_updated = ? WHERE id = ?',
+            [oldItem.quantity, DateTime.now().toIso8601String(), oldItem.productId],
+          );
+        }
+      }
+
+      // 2. Delete all old sale records for this invoice
+      await txn.delete('sales', where: 'invoice_id = ?', whereArgs: [invoiceId]);
+
+      // 3. Insert new sale records and deduct inventory for new items
+      for (final item in updatedItems) {
+        final itemTotal = item.totalAmount;
+        final itemDiscount = newTotalAmount > 0 ? (discountAmount / newTotalAmount) * itemTotal : 0.0;
+        final itemFinal = itemTotal - itemDiscount;
+        final itemProfit = item.profit - itemDiscount;
+
+        final isRealProduct = item.productId != null;
+
+        await txn.insert('sales', {
+          'product_id': isRealProduct ? item.productId : null,
+          'barcode': item.barcode,
+          'product_name': item.productName,
+          'quantity': item.quantity,
+          'cost_price': item.costPrice,
+          'sale_price': item.salePrice,
+          'total_amount': itemTotal,
+          'profit': itemProfit,
+          'customer_id': oldInvoice.customerId,
+          'discount_amount': itemDiscount,
+          'final_amount': itemFinal,
+          'invoice_id': invoiceId,
+          if (item.note != null) 'note': item.note,
+        });
+
+        // Deduct from inventory for real products
+        if (isRealProduct) {
+          await txn.rawUpdate(
+            'UPDATE products SET quantity = quantity - ?, last_updated = ? WHERE id = ?',
+            [item.quantity, DateTime.now().toIso8601String(), item.productId],
+          );
+        }
+      }
+
+      // 4. Update the invoice record
+      await txn.update('invoices', {
+        'total_amount': newTotalAmount,
+        'discount_amount': discountAmount,
+        'final_amount': newFinalAmount,
+        'paid_amount': newPaidAmount,
+        'total_profit': newTotalProfit,
+        'payment_method': newPaymentMethod,
+      }, where: 'id = ?', whereArgs: [invoiceId]);
+    });
+
+    _auditLogger.log(
+      action: AuditAction.invoiceUpdated,
+      entityType: 'invoice',
+      entityId: invoiceId,
+      entityName: oldInvoice.invoiceNumber,
+      oldValue: 'Items: ${oldItems.length}, Total: ${oldInvoice.finalAmount}',
+      newValue: 'Items: ${updatedItems.length}, Total: $newFinalAmount',
+      details: 'Invoice items updated with inventory adjustment',
+    );
+
+    _invalidateCache();
+
+    // Return the updated invoice
+    return await getInvoiceById(invoiceId);
   }
 
   @override

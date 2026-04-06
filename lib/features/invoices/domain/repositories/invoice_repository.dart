@@ -11,6 +11,15 @@ abstract class InvoiceRepository {
   Future<List<SaleItem>> getInvoiceItems(int invoiceId);
   Future<int> deleteInvoice(int id);
   
+  // Full invoice update (add/remove/edit items with inventory tracking)
+  Future<Invoice?> updateInvoice({
+    required int invoiceId,
+    required List<SaleItem> updatedItems,
+    double discountAmount = 0,
+    String? paymentMethod,
+    double? paidAmount,
+  });
+  
   // Payment update
   Future<int> updateInvoicePaidAmount(int invoiceId, double paidAmount);
   

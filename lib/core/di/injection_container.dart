@@ -17,6 +17,7 @@ import '../../features/products/presentation/bloc/product_bloc.dart';
 import '../../features/sales/data/repositories/sales_repository_impl.dart';
 import '../../features/sales/domain/repositories/sales_repository.dart';
 import '../../features/sales/presentation/bloc/sales_bloc.dart';
+import '../../features/sales/presentation/bloc/all_sales_bloc.dart';
 import '../../features/customers/data/repositories/customer_repository_impl.dart';
 import '../../features/customers/domain/repositories/customer_repository.dart';
 import '../../features/customers/presentation/bloc/customer_bloc.dart';
@@ -84,4 +85,5 @@ Future<void> init() async {
   sl.registerLazySingleton(() => ExpenseBloc(sl()));
   sl.registerLazySingleton(() => PriceListBloc(sl(), sl(), sl()));
   sl.registerLazySingleton(() => SupplierBloc(sl()));
+  sl.registerLazySingleton(() => AllSalesBloc(sl()));
 }

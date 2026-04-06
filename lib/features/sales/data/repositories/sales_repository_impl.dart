@@ -4,6 +4,7 @@ import '../../../../core/services/cache_service.dart';
 import '../../../invoices/domain/entities/invoice.dart';
 import '../../../invoices/domain/entities/sale_item.dart';
 import '../../domain/entities/cart_item.dart';
+import '../../domain/entities/sale_record.dart';
 import '../../domain/repositories/sales_repository.dart';
 
 class SalesRepositoryImpl implements SalesRepository {
@@ -231,5 +232,75 @@ class SalesRepositoryImpl implements SalesRepository {
     ''', [startOfDay.toIso8601String()]);
     
     return (result.first['profit'] as num?)?.toDouble() ?? 0;
+  }
+
+  @override
+  Future<List<SaleRecord>> getAllSaleRecords({
+    String? searchQuery,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final db = await _databaseHelper.database;
+
+    final hasSearch = searchQuery != null && searchQuery.trim().isNotEmpty;
+    final searchTerm = hasSearch ? '%${searchQuery.trim()}%' : null;
+
+    String whereClause = '';
+    List<dynamic> whereArgs = [];
+
+    if (hasSearch) {
+      whereClause = '''
+        WHERE s.product_name LIKE ?
+           OR s.barcode LIKE ?
+           OR c.name LIKE ?
+           OR i.invoice_number LIKE ?
+      ''';
+      whereArgs = [searchTerm, searchTerm, searchTerm, searchTerm];
+    }
+
+    final result = await db.rawQuery('''
+      SELECT s.*,
+             c.name AS customer_name,
+             i.invoice_number AS invoice_number
+      FROM sales s
+      LEFT JOIN customers c ON s.customer_id = c.id
+      LEFT JOIN invoices i ON s.invoice_id = i.id
+      $whereClause
+      ORDER BY s.sale_date DESC
+      LIMIT ? OFFSET ?
+    ''', [...whereArgs, limit, offset]);
+
+    return result.map((map) => SaleRecord.fromMap(map)).toList();
+  }
+
+  @override
+  Future<int> getSaleRecordsCount({String? searchQuery}) async {
+    final db = await _databaseHelper.database;
+
+    final hasSearch = searchQuery != null && searchQuery.trim().isNotEmpty;
+    final searchTerm = hasSearch ? '%${searchQuery.trim()}%' : null;
+
+    String whereClause = '';
+    List<dynamic> whereArgs = [];
+
+    if (hasSearch) {
+      whereClause = '''
+        WHERE s.product_name LIKE ?
+           OR s.barcode LIKE ?
+           OR c.name LIKE ?
+           OR i.invoice_number LIKE ?
+      ''';
+      whereArgs = [searchTerm, searchTerm, searchTerm, searchTerm];
+    }
+
+    final result = await db.rawQuery('''
+      SELECT COUNT(*) AS cnt
+      FROM sales s
+      LEFT JOIN customers c ON s.customer_id = c.id
+      LEFT JOIN invoices i ON s.invoice_id = i.id
+      $whereClause
+    ''', whereArgs);
+
+    return (result.first['cnt'] as int?) ?? 0;
   }
 }

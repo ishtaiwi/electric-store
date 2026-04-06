@@ -383,6 +383,21 @@ class _SalesPageState extends State<SalesPage> {
                                 ),
                               ),
                               const Spacer(),
+                              // Refresh button
+                              IconButton(
+                                onPressed: () {
+                                  context.read<SalesBloc>().add(SalesRefresh());
+                                  _loadCustomers();
+                                },
+                                icon: const Icon(Icons.refresh_rounded),
+                                color: AppColors.primary,
+                                tooltip: l10n.get('refresh'),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: AppColors.primary.withOpacity(0.1),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
                               // Quick quantity selector
                               _buildQuickQuantitySelector(),
                             ],

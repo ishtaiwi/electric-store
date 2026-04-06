@@ -5,9 +5,11 @@ import '../../../../core/di/injection_container.dart' as di;
 import '../../../../core/services/localization_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../customers/presentation/bloc/customer_bloc.dart';
+import '../../../products/presentation/bloc/product_bloc.dart';
 import '../../domain/entities/invoice.dart';
 import '../../domain/entities/sale_item.dart';
 import '../bloc/invoice_bloc.dart';
+import 'edit_invoice_dialog.dart';
 
 class InvoiceDetailsDialog extends StatefulWidget {
   final Invoice invoice;
@@ -56,6 +58,61 @@ class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
     );
     di.sl<CustomerBloc>().add(CustomerRefresh());
     Navigator.pop(context);
+  }
+
+  void _editInvoice(List<SaleItem> items) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => BlocProvider.value(
+        value: context.read<InvoiceBloc>(),
+        child: EditInvoiceDialog(
+          invoice: widget.invoice,
+          items: items,
+        ),
+      ),
+    );
+  }
+
+  void _deleteInvoice() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 24),
+            const SizedBox(width: 10),
+            Text(LocalizationService().get('deleteInvoiceTitle')),
+          ],
+        ),
+        content: Text(
+          LocalizationService().get('confirmDeleteInvoiceMsg'),
+          style: const TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(LocalizationService().get('cancel')),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx); // close confirmation dialog
+              context.read<InvoiceBloc>().add(InvoiceDelete(widget.invoice.id!));
+              di.sl<CustomerBloc>().add(CustomerRefresh());
+              di.sl<ProductBloc>().add(ProductRefresh());
+              Navigator.pop(context); // close details dialog
+            },
+            icon: const Icon(Icons.delete_forever, size: 18),
+            label: Text(LocalizationService().get('delete')),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   IconData _getPaymentMethodIcon(String method) {
@@ -803,6 +860,32 @@ class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                   child: Row(
                     children: [
+                      // Delete button
+                      OutlinedButton.icon(
+                        onPressed: _deleteInvoice,
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        label: Text(LocalizationService().get('delete')),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.error,
+                          side: BorderSide(color: AppColors.error.withOpacity(0.4)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Edit button
+                      OutlinedButton.icon(
+                        onPressed: () => _editInvoice(items),
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        label: Text(LocalizationService().get('editInvoice')),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.info,
+                          side: BorderSide(color: AppColors.info.withOpacity(0.4)),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       // PDF save button
                       OutlinedButton.icon(
                         onPressed: () {
@@ -813,7 +896,7 @@ class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.error.withOpacity(0.8),
                           side: BorderSide(color: AppColors.error.withOpacity(0.3)),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                       ),
