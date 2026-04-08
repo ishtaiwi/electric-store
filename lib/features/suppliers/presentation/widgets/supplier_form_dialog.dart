@@ -65,8 +65,8 @@ class _SupplierFormDialogState extends State<SupplierFormDialog> {
     final loc = LocalizationService();
     return AlertDialog(
       title: Text(isEditing ? loc.get('editSupplier') : loc.get('addSupplier')),
-      content: SizedBox(
-        width: 400,
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
         child: Form(
           key: _formKey,
           child: Column(

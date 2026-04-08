@@ -250,8 +250,10 @@ class _PriceListFormDialogState extends State<PriceListFormDialog> {
       insetPadding: const EdgeInsets.all(20),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        width: 950,
-        height: MediaQuery.of(context).size.height * 0.9,
+        constraints: BoxConstraints(
+          maxWidth: 950,
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+        ),
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : Form(

@@ -143,8 +143,8 @@ class _SettingsPageState extends State<SettingsPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: Text(LocalizationService().get('addUser')),
-          content: SizedBox(
-            width: 400,
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
             child: Form(
               key: formKey,
               child: Column(

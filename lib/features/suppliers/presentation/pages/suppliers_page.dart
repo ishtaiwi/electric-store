@@ -7,6 +7,8 @@ import '../../domain/entities/supplier.dart';
 import '../bloc/supplier_bloc.dart';
 import '../widgets/supplier_form_dialog.dart';
 import '../widgets/supplier_attachments_dialog.dart';
+import '../widgets/supplier_financial_dialog.dart';
+import '../widgets/supplier_global_outstanding_dialog.dart';
 
 class SuppliersPage extends StatefulWidget {
   const SuppliersPage({super.key});
@@ -41,6 +43,26 @@ class _SuppliersPageState extends State<SuppliersPage> {
       builder: (dialogContext) => BlocProvider.value(
         value: context.read<SupplierBloc>(),
         child: SupplierAttachmentsDialog(supplier: supplier),
+      ),
+    );
+  }
+
+  void _showFinancialDialog(Supplier supplier) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => BlocProvider.value(
+        value: context.read<SupplierBloc>(),
+        child: SupplierFinancialDialog(supplier: supplier),
+      ),
+    );
+  }
+
+  void _showGlobalOutstandingDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => BlocProvider.value(
+        value: context.read<SupplierBloc>(),
+        child: const SupplierGlobalOutstandingDialog(),
       ),
     );
   }
@@ -117,24 +139,41 @@ class _SuppliersPageState extends State<SuppliersPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    loc.get('suppliers'),
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                  Flexible(
+                    child: Text(
+                      loc.get('suppliers'),
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  ElevatedButton.icon(
-                    onPressed: () => _showSupplierDialog(),
-                    icon: const Icon(Icons.add),
-                    label: Text(loc.get('addSupplier')),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        onPressed: _showGlobalOutstandingDialog,
+                        icon: const Icon(Icons.account_balance),
+                        tooltip: loc.get('supplierOutstandingBalances'),
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppColors.primary.withOpacity(0.1),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () => _showSupplierDialog(),
+                        icon: const Icon(Icons.add),
+                        label: Text(loc.get('addSupplier')),
+                      ),
+                    ],
                   ),
                 ],
               ),
               const SizedBox(height: 24),
 
               // Search
-              SizedBox(
-                width: 400,
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
                 child: TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
@@ -236,25 +275,52 @@ class _SuppliersPageState extends State<SuppliersPage> {
                                     DataCell(Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.attach_file,
-                                              color: AppColors.info, size: 20),
-                                          tooltip: loc.get('attachments'),
-                                          onPressed: () =>
-                                              _showAttachmentsDialog(supplier),
+                                        SizedBox(
+                                          width: 36,
+                                          height: 36,
+                                          child: IconButton(
+                                            padding: EdgeInsets.zero,
+                                            icon: const Icon(Icons.account_balance_wallet,
+                                                color: Colors.teal, size: 18),
+                                            tooltip: loc.get('supplierFinancials'),
+                                            onPressed: () =>
+                                                _showFinancialDialog(supplier),
+                                          ),
                                         ),
-                                        IconButton(
-                                          icon: const Icon(Icons.edit,
-                                              color: AppColors.primary, size: 20),
-                                          tooltip: loc.get('edit'),
-                                          onPressed: () =>
-                                              _showSupplierDialog(supplier: supplier),
+                                        SizedBox(
+                                          width: 36,
+                                          height: 36,
+                                          child: IconButton(
+                                            padding: EdgeInsets.zero,
+                                            icon: const Icon(Icons.attach_file,
+                                                color: AppColors.info, size: 18),
+                                            tooltip: loc.get('attachments'),
+                                            onPressed: () =>
+                                                _showAttachmentsDialog(supplier),
+                                          ),
                                         ),
-                                        IconButton(
-                                          icon: Icon(Icons.delete,
-                                              color: AppColors.error, size: 20),
-                                          tooltip: loc.get('delete'),
-                                          onPressed: () => _confirmDelete(supplier),
+                                        SizedBox(
+                                          width: 36,
+                                          height: 36,
+                                          child: IconButton(
+                                            padding: EdgeInsets.zero,
+                                            icon: const Icon(Icons.edit,
+                                                color: AppColors.primary, size: 18),
+                                            tooltip: loc.get('edit'),
+                                            onPressed: () =>
+                                                _showSupplierDialog(supplier: supplier),
+                                          ),
+                                        ),
+                                        SizedBox(
+                                          width: 36,
+                                          height: 36,
+                                          child: IconButton(
+                                            padding: EdgeInsets.zero,
+                                            icon: const Icon(Icons.delete,
+                                                color: AppColors.error, size: 18),
+                                            tooltip: loc.get('delete'),
+                                            onPressed: () => _confirmDelete(supplier),
+                                          ),
                                         ),
                                       ],
                                     )),

@@ -49,8 +49,8 @@ class _StockAdjustmentDialogState extends State<StockAdjustmentDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(LocalizationService().get('stockAdjustment')),
-      content: SizedBox(
-        width: 400,
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
         child: Form(
           key: _formKey,
           child: Column(

@@ -163,8 +163,8 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
         ),
         content: Form(
           key: formKey,
-          child: SizedBox(
-            width: 400,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

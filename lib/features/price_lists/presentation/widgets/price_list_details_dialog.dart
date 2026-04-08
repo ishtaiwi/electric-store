@@ -21,8 +21,8 @@ class PriceListDetailsDialog extends StatelessWidget {
       insetPadding: const EdgeInsets.all(32),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        width: 750,
         constraints: BoxConstraints(
+          maxWidth: 750,
           maxHeight: MediaQuery.of(context).size.height * 0.85,
         ),
         child: BlocConsumer<PriceListBloc, PriceListState>(

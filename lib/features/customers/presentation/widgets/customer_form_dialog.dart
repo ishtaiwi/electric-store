@@ -82,8 +82,8 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(isEditing ? LocalizationService().get('editCustomer') : LocalizationService().get('addCustomer')),
-      content: SizedBox(
-        width: 400,
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(

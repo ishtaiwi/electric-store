@@ -169,9 +169,12 @@ class _SupplierAttachmentsDialogState extends State<SupplierAttachmentsDialog> {
   Widget build(BuildContext context) {
     final loc = LocalizationService();
     return Dialog(
-      child: SizedBox(
-        width: 600,
-        height: 500,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 600,
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
         child: Column(
           children: [
             // Header

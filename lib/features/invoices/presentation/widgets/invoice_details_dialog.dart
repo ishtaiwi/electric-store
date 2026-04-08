@@ -157,8 +157,10 @@ class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 80, vertical: 40),
           child: Container(
-            width: 680,
-            constraints: const BoxConstraints(maxHeight: 700),
+            constraints: BoxConstraints(
+              maxWidth: 680,
+              maxHeight: MediaQuery.of(context).size.height * 0.85,
+            ),
             decoration: BoxDecoration(
               color: AppColors.surface,
               borderRadius: BorderRadius.circular(16),

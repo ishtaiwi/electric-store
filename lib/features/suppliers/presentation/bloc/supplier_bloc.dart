@@ -3,6 +3,8 @@ import 'package:equatable/equatable.dart';
 import '../../../../core/services/localization_service.dart';
 import '../../domain/entities/supplier.dart';
 import '../../domain/entities/supplier_attachment.dart';
+import '../../domain/entities/supplier_invoice.dart';
+import '../../domain/entities/supplier_payment.dart';
 import '../../domain/repositories/supplier_repository.dart';
 
 // ─── Events ───
@@ -73,6 +75,64 @@ class SupplierDeleteAttachment extends SupplierEvent {
   List<Object?> get props => [attachmentId, supplierId];
 }
 
+// ─── Invoice Events ───
+
+class SupplierLoadInvoices extends SupplierEvent {
+  final int supplierId;
+  const SupplierLoadInvoices(this.supplierId);
+  @override
+  List<Object?> get props => [supplierId];
+}
+
+class SupplierCreateInvoice extends SupplierEvent {
+  final SupplierInvoice invoice;
+  const SupplierCreateInvoice(this.invoice);
+  @override
+  List<Object?> get props => [invoice];
+}
+
+class SupplierUpdateInvoice extends SupplierEvent {
+  final SupplierInvoice invoice;
+  const SupplierUpdateInvoice(this.invoice);
+  @override
+  List<Object?> get props => [invoice];
+}
+
+class SupplierDeleteInvoice extends SupplierEvent {
+  final int invoiceId;
+  final int supplierId;
+  const SupplierDeleteInvoice({required this.invoiceId, required this.supplierId});
+  @override
+  List<Object?> get props => [invoiceId, supplierId];
+}
+
+class SupplierRecordPayment extends SupplierEvent {
+  final SupplierPayment payment;
+  final int supplierId;
+  const SupplierRecordPayment({required this.payment, required this.supplierId});
+  @override
+  List<Object?> get props => [payment, supplierId];
+}
+
+class SupplierDeletePayment extends SupplierEvent {
+  final int paymentId;
+  final int supplierId;
+  const SupplierDeletePayment({required this.paymentId, required this.supplierId});
+  @override
+  List<Object?> get props => [paymentId, supplierId];
+}
+
+class SupplierLoadFinancialSummary extends SupplierEvent {
+  final int supplierId;
+  const SupplierLoadFinancialSummary(this.supplierId);
+  @override
+  List<Object?> get props => [supplierId];
+}
+
+class SupplierLoadGlobalOutstanding extends SupplierEvent {}
+
+class SupplierLoadAllOutstanding extends SupplierEvent {}
+
 // ─── States ───
 
 abstract class SupplierState extends Equatable {
@@ -89,15 +149,49 @@ class SupplierLoaded extends SupplierState {
   final List<Supplier> suppliers;
   final List<SupplierAttachment> attachments;
   final int? selectedSupplierId;
+  final List<SupplierInvoice> invoices;
+  final List<SupplierPayment> payments;
+  final Map<String, dynamic>? financialSummary;
+  final double? globalOutstanding;
+  final List<Map<String, dynamic>>? allSuppliersOutstanding;
 
   const SupplierLoaded({
     required this.suppliers,
     this.attachments = const [],
     this.selectedSupplierId,
+    this.invoices = const [],
+    this.payments = const [],
+    this.financialSummary,
+    this.globalOutstanding,
+    this.allSuppliersOutstanding,
   });
 
+  SupplierLoaded copyWithFinancial({
+    List<SupplierInvoice>? invoices,
+    List<SupplierPayment>? payments,
+    Map<String, dynamic>? financialSummary,
+    double? globalOutstanding,
+    List<Map<String, dynamic>>? allSuppliersOutstanding,
+    int? selectedSupplierId,
+  }) {
+    return SupplierLoaded(
+      suppliers: suppliers,
+      attachments: attachments,
+      selectedSupplierId: selectedSupplierId ?? this.selectedSupplierId,
+      invoices: invoices ?? this.invoices,
+      payments: payments ?? this.payments,
+      financialSummary: financialSummary ?? this.financialSummary,
+      globalOutstanding: globalOutstanding ?? this.globalOutstanding,
+      allSuppliersOutstanding: allSuppliersOutstanding ?? this.allSuppliersOutstanding,
+    );
+  }
+
   @override
-  List<Object?> get props => [suppliers, attachments, selectedSupplierId];
+  List<Object?> get props => [
+        suppliers, attachments, selectedSupplierId,
+        invoices, payments, financialSummary,
+        globalOutstanding, allSuppliersOutstanding,
+      ];
 }
 
 class SupplierError extends SupplierState {
@@ -130,6 +224,15 @@ class SupplierBloc extends Bloc<SupplierEvent, SupplierState> {
     on<SupplierAddAttachment>(_onAddAttachment);
     on<SupplierUpdateAttachmentComment>(_onUpdateAttachmentComment);
     on<SupplierDeleteAttachment>(_onDeleteAttachment);
+    on<SupplierLoadInvoices>(_onLoadInvoices);
+    on<SupplierCreateInvoice>(_onCreateInvoice);
+    on<SupplierUpdateInvoice>(_onUpdateInvoice);
+    on<SupplierDeleteInvoice>(_onDeleteInvoice);
+    on<SupplierRecordPayment>(_onRecordPayment);
+    on<SupplierDeletePayment>(_onDeletePayment);
+    on<SupplierLoadFinancialSummary>(_onLoadFinancialSummary);
+    on<SupplierLoadGlobalOutstanding>(_onLoadGlobalOutstanding);
+    on<SupplierLoadAllOutstanding>(_onLoadAllOutstanding);
   }
 
   Future<void> _onLoadAll(SupplierLoadAll event, Emitter<SupplierState> emit) async {
@@ -313,6 +416,176 @@ class SupplierBloc extends Bloc<SupplierEvent, SupplierState> {
         suppliers: currentList,
         attachments: attachments,
         selectedSupplierId: event.supplierId,
+      ));
+    } catch (e) {
+      emit(SupplierError(e.toString()));
+    }
+  }
+
+  // ─── Invoice Handlers ───
+
+  SupplierLoaded _getCurrentLoaded() {
+    final s = state;
+    if (s is SupplierLoaded) return s;
+    return const SupplierLoaded(suppliers: []);
+  }
+
+  Future<void> _onLoadInvoices(SupplierLoadInvoices event, Emitter<SupplierState> emit) async {
+    try {
+      final invoices = await _supplierRepository.getInvoicesBySupplier(event.supplierId);
+      final summary = await _supplierRepository.getSupplierFinancialSummary(event.supplierId);
+      final current = _getCurrentLoaded();
+      emit(current.copyWithFinancial(
+        invoices: invoices,
+        financialSummary: summary,
+        selectedSupplierId: event.supplierId,
+      ));
+    } catch (e) {
+      emit(SupplierError(e.toString()));
+    }
+  }
+
+  Future<void> _onCreateInvoice(SupplierCreateInvoice event, Emitter<SupplierState> emit) async {
+    try {
+      await _supplierRepository.createInvoice(event.invoice);
+      final invoices = await _supplierRepository.getInvoicesBySupplier(event.invoice.supplierId);
+      final summary = await _supplierRepository.getSupplierFinancialSummary(event.invoice.supplierId);
+      final current = _getCurrentLoaded();
+      emit(current.copyWithFinancial(
+        invoices: invoices,
+        financialSummary: summary,
+        selectedSupplierId: event.invoice.supplierId,
+      ));
+      emit(SupplierOperationSuccess(LocalizationService().get('supplierInvoiceCreated')));
+      emit(current.copyWithFinancial(
+        invoices: invoices,
+        financialSummary: summary,
+        selectedSupplierId: event.invoice.supplierId,
+      ));
+    } catch (e) {
+      emit(SupplierError(e.toString()));
+    }
+  }
+
+  Future<void> _onUpdateInvoice(SupplierUpdateInvoice event, Emitter<SupplierState> emit) async {
+    try {
+      await _supplierRepository.updateInvoice(event.invoice);
+      final invoices = await _supplierRepository.getInvoicesBySupplier(event.invoice.supplierId);
+      final summary = await _supplierRepository.getSupplierFinancialSummary(event.invoice.supplierId);
+      final current = _getCurrentLoaded();
+      emit(current.copyWithFinancial(
+        invoices: invoices,
+        financialSummary: summary,
+        selectedSupplierId: event.invoice.supplierId,
+      ));
+      emit(SupplierOperationSuccess(LocalizationService().get('supplierInvoiceUpdated')));
+      emit(current.copyWithFinancial(
+        invoices: invoices,
+        financialSummary: summary,
+        selectedSupplierId: event.invoice.supplierId,
+      ));
+    } catch (e) {
+      emit(SupplierError(e.toString()));
+    }
+  }
+
+  Future<void> _onDeleteInvoice(SupplierDeleteInvoice event, Emitter<SupplierState> emit) async {
+    try {
+      await _supplierRepository.deleteInvoice(event.invoiceId);
+      final invoices = await _supplierRepository.getInvoicesBySupplier(event.supplierId);
+      final summary = await _supplierRepository.getSupplierFinancialSummary(event.supplierId);
+      final current = _getCurrentLoaded();
+      emit(current.copyWithFinancial(
+        invoices: invoices,
+        financialSummary: summary,
+        selectedSupplierId: event.supplierId,
+      ));
+      emit(SupplierOperationSuccess(LocalizationService().get('supplierInvoiceDeleted')));
+      emit(current.copyWithFinancial(
+        invoices: invoices,
+        financialSummary: summary,
+        selectedSupplierId: event.supplierId,
+      ));
+    } catch (e) {
+      emit(SupplierError(e.toString()));
+    }
+  }
+
+  Future<void> _onRecordPayment(SupplierRecordPayment event, Emitter<SupplierState> emit) async {
+    try {
+      await _supplierRepository.recordPayment(event.payment);
+      final invoices = await _supplierRepository.getInvoicesBySupplier(event.supplierId);
+      final summary = await _supplierRepository.getSupplierFinancialSummary(event.supplierId);
+      final current = _getCurrentLoaded();
+      emit(current.copyWithFinancial(
+        invoices: invoices,
+        financialSummary: summary,
+        selectedSupplierId: event.supplierId,
+      ));
+      emit(SupplierOperationSuccess(LocalizationService().get('supplierPaymentRecorded')));
+      emit(current.copyWithFinancial(
+        invoices: invoices,
+        financialSummary: summary,
+        selectedSupplierId: event.supplierId,
+      ));
+    } catch (e) {
+      emit(SupplierError(e.toString()));
+    }
+  }
+
+  Future<void> _onDeletePayment(SupplierDeletePayment event, Emitter<SupplierState> emit) async {
+    try {
+      await _supplierRepository.deletePayment(event.paymentId);
+      final invoices = await _supplierRepository.getInvoicesBySupplier(event.supplierId);
+      final summary = await _supplierRepository.getSupplierFinancialSummary(event.supplierId);
+      final current = _getCurrentLoaded();
+      emit(current.copyWithFinancial(
+        invoices: invoices,
+        financialSummary: summary,
+        selectedSupplierId: event.supplierId,
+      ));
+      emit(SupplierOperationSuccess(LocalizationService().get('supplierPaymentDeleted')));
+      emit(current.copyWithFinancial(
+        invoices: invoices,
+        financialSummary: summary,
+        selectedSupplierId: event.supplierId,
+      ));
+    } catch (e) {
+      emit(SupplierError(e.toString()));
+    }
+  }
+
+  Future<void> _onLoadFinancialSummary(SupplierLoadFinancialSummary event, Emitter<SupplierState> emit) async {
+    try {
+      final summary = await _supplierRepository.getSupplierFinancialSummary(event.supplierId);
+      final current = _getCurrentLoaded();
+      emit(current.copyWithFinancial(
+        financialSummary: summary,
+        selectedSupplierId: event.supplierId,
+      ));
+    } catch (e) {
+      emit(SupplierError(e.toString()));
+    }
+  }
+
+  Future<void> _onLoadGlobalOutstanding(SupplierLoadGlobalOutstanding event, Emitter<SupplierState> emit) async {
+    try {
+      final outstanding = await _supplierRepository.getGlobalOutstandingBalance();
+      final current = _getCurrentLoaded();
+      emit(current.copyWithFinancial(globalOutstanding: outstanding));
+    } catch (e) {
+      emit(SupplierError(e.toString()));
+    }
+  }
+
+  Future<void> _onLoadAllOutstanding(SupplierLoadAllOutstanding event, Emitter<SupplierState> emit) async {
+    try {
+      final allOutstanding = await _supplierRepository.getAllSuppliersOutstanding();
+      final globalOutstanding = await _supplierRepository.getGlobalOutstandingBalance();
+      final current = _getCurrentLoaded();
+      emit(current.copyWithFinancial(
+        allSuppliersOutstanding: allOutstanding,
+        globalOutstanding: globalOutstanding,
       ));
     } catch (e) {
       emit(SupplierError(e.toString()));

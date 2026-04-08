@@ -274,31 +274,31 @@ class _DashboardPageState extends State<DashboardPage> {
             },
             leading: Column(
               children: [
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.2),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.electrical_services,
-                    size: 32,
+                    size: 24,
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 Text(
                   LocalizationService().get('appName'),
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                    fontSize: 12,
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
                 const Divider(color: Colors.white24, height: 1),
-                const SizedBox(height: 16),
+                const SizedBox(height: 4),
               ],
             ),
             trailing: SizedBox(
@@ -309,7 +309,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 children: [
                   const Divider(color: Colors.white24, height: 1),
                   Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     child: Row(
                       children: [
                         CircleAvatar(

@@ -11,24 +11,26 @@
 2. [Dashboard](#2-dashboard)
 3. [Products Management](#3-products-management)
 4. [Point of Sale (Sales)](#4-point-of-sale-sales)
-5. [Customers Management](#5-customers-management)
-6. [Invoices Management](#6-invoices-management)
-7. [Expenses Management](#7-expenses-management)
-8. [Price Lists](#8-price-lists)
-9. [Reports & Analytics](#9-reports--analytics)
-10. [Backup & Restore](#10-backup--restore)
-11. [Settings](#11-settings)
-12. [AI Chatbot Assistant](#12-ai-chatbot-assistant)
-13. [Smart Search](#13-smart-search)
-14. [PDF Generation & Printing](#14-pdf-generation--printing)
-15. [Audit Logging](#15-audit-logging)
-16. [Caching](#16-caching)
-17. [Security](#17-security)
-18. [Validation](#18-validation)
-19. [Error Handling](#19-error-handling)
-20. [Localization (i18n)](#20-localization-i18n)
-21. [Database](#21-database)
-22. [Installer](#22-installer)
+5. [All Sales (Sales History)](#5-all-sales-sales-history)
+6. [Customers Management](#6-customers-management)
+7. [Invoices Management](#7-invoices-management)
+8. [Expenses Management](#8-expenses-management)
+9. [Suppliers Management](#9-suppliers-management)
+10. [Price Lists](#10-price-lists)
+11. [Reports & Analytics](#11-reports--analytics)
+12. [Backup & Restore](#12-backup--restore)
+13. [Settings](#13-settings)
+14. [AI Chatbot Assistant](#14-ai-chatbot-assistant)
+15. [Smart Search](#15-smart-search)
+16. [PDF Generation & Printing](#16-pdf-generation--printing)
+17. [Audit Logging](#17-audit-logging)
+18. [Caching](#18-caching)
+19. [Security](#19-security)
+20. [Validation](#20-validation)
+21. [Error Handling](#21-error-handling)
+22. [Localization (i18n)](#22-localization-i18n)
+23. [Database](#23-database)
+24. [Installer](#24-installer)
 
 ---
 
@@ -46,7 +48,7 @@
 
 ## 2. Dashboard
 
-- **Navigation rail** sidebar with 9 tabs (Dashboard, Sales, Products, Customers, Invoices, Expenses, Price Lists, Backup, Settings)
+- **Navigation rail** sidebar with 11 tabs (Dashboard, Sales, All Sales, Products, Customers, Invoices, Expenses, Suppliers, Price Lists, Backup, Settings)
 - `IndexedStack` for instant page switching with lazy data loading
 - User profile display with role and logout option
 - Time-based greeting with localized date/time
@@ -55,7 +57,7 @@
 
 | Widget | Details |
 |---|---|
-| **Quick Access Cards** | 8 navigation shortcuts (Sales, Products, Customers, Invoices, Expenses, Price Lists, Backup, Settings) |
+| **Quick Access Cards** | 10 navigation shortcuts (Sales, All Sales, Products, Customers, Invoices, Expenses, Suppliers, Price Lists, Backup, Settings) |
 | **Alerts** | Low stock count, out of stock count, total customer debts |
 | **Today's Summary** | Today's sales total, today's profit, today's invoice count |
 | **Quick Actions** | New Sale, Add Product, Add Customer, View Invoices |
@@ -78,7 +80,7 @@
 
 ### Product Fields
 
-`name`, `barcode`, `quantity`, `price`, `costPrice`, `note`, `supplier`, `minStock`, `lastUpdated`  
+`name`, `barcode`, `quantity`, `price`, `costPrice`, `note`, `supplier`, `supplier_id` (FK), `minStock`, `lastUpdated`  
 Computed: `profit`, `profitMargin`, `isLowStock`, `isOutOfStock`
 
 ---
@@ -104,7 +106,21 @@ Computed: `profit`, `profitMargin`, `isLowStock`, `isOutOfStock`
 
 ---
 
-## 5. Customers Management
+## 5. All Sales (Sales History)
+
+- **Dedicated tab** for viewing all sales records (separate from POS)
+- **DataTable** with comprehensive sales information
+- **Search** by invoice number, customer name, or product details
+- **Debounced search** with 400ms delay for performance
+- **Pagination** with infinite scroll (load more on scroll)
+- **Refresh** functionality to reload data
+- **Total records count** display
+- **Status bar** showing filtered counts and totals
+- Fast in-memory filtering without full DB reload
+
+---
+
+## 6. Customers Management
 
 - **Full CRUD** — Create, read, update, delete customers
 - **DataTable** with columns: Name, Phone, Email, Balance (color-coded), Actions
@@ -121,7 +137,7 @@ Computed: `profit`, `profitMargin`, `isLowStock`, `isOutOfStock`
 
 ---
 
-## 6. Invoices Management
+## 7. Invoices Management
 
 - **DataTable** listing with filtering controls
 - **Date range picker** — defaults to current month
@@ -139,7 +155,7 @@ Computed: `profit`, `profitMargin`, `isLowStock`, `isOutOfStock`
 
 ---
 
-## 7. Expenses Management
+## 8. Expenses Management
 
 - **Full CRUD** — Create, read, update, delete expenses
 - **DataTable** with columns: Date, Category, Description, Amount, Actions
@@ -155,7 +171,49 @@ Computed: `profit`, `profitMargin`, `isLowStock`, `isOutOfStock`
 
 ---
 
-## 8. Price Lists
+## 9. Suppliers Management
+
+- **Full CRUD** — Create, read, update, delete suppliers
+- **DataTable** with columns: Name, Phone, Address, Notes, Actions
+- **Search** by name, phone, or address
+- **Supplier attachments** — attach PDF or image files to suppliers with comments
+- Attachment management dialog with file type detection
+- Integration with products — `supplier_id` foreign key in products table
+- Supplier count display
+- Fast in-memory updates without full DB reload
+
+### Supplier Financial Management
+
+- **Supplier invoices** — upload and store supplier invoices as images or PDFs with invoice number, date, and total amount
+- **Payment tracking** — track payment status per invoice: Fully Paid, Partially Paid, Unpaid
+- **Record payments** — enter paid amount with auto-calculated remaining balance; supports multiple partial payments per invoice
+- **Payment status auto-update** — invoice status and balance update automatically on each payment
+- **Financial insights** — total outstanding balance per supplier and globally across all suppliers
+- **Account statement** — detailed view per supplier: all invoices, paid amounts, remaining balances, last payment, current balance
+- **Global outstanding balances** — overview of all suppliers with outstanding debts, total outstanding across all suppliers
+- **Invoice file management** — attached files copied to app-managed directory; cleaned up on delete
+- **Cascade deletion** — deleting a supplier removes all associated invoices, payments, and invoice files
+
+### Supplier Fields
+
+`name`, `phone`, `address`, `note`, `createdDate`
+
+### Supplier Attachment Fields
+
+`supplierId`, `filePath`, `fileName`, `fileType` (pdf/image), `comment`, `uploadDate`
+
+### Supplier Invoice Fields
+
+`supplierId`, `invoiceNumber`, `invoiceDate`, `totalAmount`, `paidAmount`, `filePath`, `fileName`, `fileType`, `notes`, `createdDate`  
+Computed: `remainingAmount`, `paymentStatus` (paid/partiallyPaid/unpaid)
+
+### Supplier Payment Fields
+
+`supplierInvoiceId`, `amount`, `paymentDate`, `notes`, `createdDate`
+
+---
+
+## 10. Price Lists
 
 - **Full CRUD** — Create, read, update, delete price lists
 - **DataTable** with columns: Title, Customer Name, Item Count, Date, Actions
@@ -168,7 +226,7 @@ Computed: `profit`, `profitMargin`, `isLowStock`, `isOutOfStock`
 
 ---
 
-## 9. Reports & Analytics
+## 11. Reports & Analytics
 
 | Report | Data Provided |
 |---|---|
@@ -187,7 +245,7 @@ Computed: `profit`, `profitMargin`, `isLowStock`, `isOutOfStock`
 
 ---
 
-## 10. Backup & Restore
+## 12. Backup & Restore
 
 - **Create Backup** — user picks destination folder → creates `.zip` backup file
 - **Restore from File** — user picks `.db` file → confirmation dialog with warning → restores database
@@ -198,7 +256,7 @@ Computed: `profit`, `profitMargin`, `isLowStock`, `isOutOfStock`
 
 ---
 
-## 11. Settings
+## 13. Settings
 
 | Section | Fields |
 |---|---|
@@ -211,7 +269,7 @@ Computed: `profit`, `profitMargin`, `isLowStock`, `isOutOfStock`
 
 ---
 
-## 12. AI Chatbot Assistant
+## 14. AI Chatbot Assistant
 
 - **Floating overlay** — toggled via FAB on dashboard; backdrop dismissible
 - Chat interface with user/bot message bubbles and avatars
@@ -248,7 +306,7 @@ Computed: `profit`, `profitMargin`, `isLowStock`, `isOutOfStock`
 
 ---
 
-## 13. Smart Search
+## 15. Smart Search
 
 Four-strategy search pipeline:
 
@@ -266,7 +324,7 @@ Additional capabilities:
 
 ---
 
-## 14. PDF Generation & Printing
+## 16. PDF Generation & Printing
 
 - **Invoice PDF** — store header, bill-to section, items table, totals with discount, notes, footer
 - **Customer Statement PDF** — multi-page with all invoices and items per customer
@@ -276,7 +334,7 @@ Additional capabilities:
 
 ---
 
-## 15. Audit Logging
+## 17. Audit Logging
 
 - Dedicated `audit_logs` table (created dynamically)
 - Logs all significant actions:
@@ -290,7 +348,7 @@ Additional capabilities:
 
 ---
 
-## 16. Caching
+## 18. Caching
 
 - **In-memory cache** with configurable TTL:
   - Default: 5 minutes
@@ -302,7 +360,7 @@ Additional capabilities:
 
 ---
 
-## 17. Security
+## 19. Security
 
 - **SHA-256 password hashing** with salt
 - Input sanitization
@@ -311,7 +369,7 @@ Additional capabilities:
 
 ---
 
-## 18. Validation
+## 20. Validation
 
 - Field-level validation for all entities:
   - **Products** — name, barcode format, price, quantity, min stock
@@ -323,7 +381,7 @@ Additional capabilities:
 
 ---
 
-## 19. Error Handling
+## 21. Error Handling
 
 - Custom `AppException` with types: Database, Network, Validation, Auth, Authorization, NotFound, Conflict, Unknown
 - `Result<T>` wrapper for safe error propagation
@@ -332,7 +390,7 @@ Additional capabilities:
 
 ---
 
-## 20. Localization (i18n)
+## 22. Localization (i18n)
 
 - **Full Arabic and English** support
 - Complete string dictionaries covering all UI text
@@ -343,26 +401,30 @@ Additional capabilities:
 
 ---
 
-## 21. Database
+## 23. Database
 
-**Engine:** SQLite v6 with WAL journaling, foreign keys, 4MB cache, normal synchronous mode.
+**Engine:** SQLite v10 with WAL journaling, foreign keys, 20MB cache, normal synchronous mode, 256MB memory-mapped I/O.
 
 | Table | Purpose |
 |---|---|
-| `products` | Product catalog — name, barcode, price, cost price, quantity, min stock, supplier, notes |
+| `suppliers` | Supplier records — name, phone, address, note |
+| `supplier_attachments` | Supplier file attachments — PDF/image files with comments |
+| `products` | Product catalog — name, barcode, price, cost price, quantity, min stock, supplier, supplier_id (FK), notes |
 | `customers` | Customer records — name, phone, email, address, balance adjustment |
 | `users` | System users — username, hashed password, role, full name |
 | `invoices` | Sale invoices — invoice number, customer, totals, discount, profit, paid amount, payment method, notes |
-| `sales` | Invoice line items — product, quantity, sale/cost price, discount, profit |
+| `sales` | Invoice line items — product, quantity, sale/cost price, discount, profit, note |
 | `discounts` | Discount records per invoice |
 | `inventory_adjustments` | Stock adjustment history — product, type, quantity, reason |
 | `cancelled_sales` | Cancelled sale records with reversal tracking |
-| `expenses` | Business expenses — category, amount, date, receipt, supplier |
-| `additional_income` | Non-sale income records |
-| `budget` | Budget tracking |
+| `expenses` | Business expenses — category, amount, date, receipt, supplier, notes |
+| `additional_income` | Non-sale income records (UI not yet implemented) |
+| `budget` | Budget tracking (UI not yet implemented) |
 | `store_settings` | Key-value store settings (store name, currency, tax rate) |
 | `price_lists` | Named price lists with optional customer |
 | `price_list_items` | Price list line items |
+| `supplier_invoices` | Supplier invoice records — invoice number, date, total/paid amounts, file attachment |
+| `supplier_payments` | Individual payment records against supplier invoices |
 | `audit_logs` | Full audit trail |
 
 ### Migrations
@@ -372,10 +434,14 @@ Additional capabilities:
 - v3 → v4: Added customer index on invoices
 - v4 → v5: Added `price_lists` and `price_list_items` tables
 - v5 → v6: Added `notes` to invoices
+- v6 → v7: Added `suppliers` and `supplier_attachments` tables, added `supplier_id` FK to products
+- v7 → v8: Added comprehensive performance indexes (20+ new indexes)
+- v8 → v9: Added `note` column to sales table
+- v9 → v10: Added `supplier_invoices` and `supplier_payments` tables with indexes
 
 ---
 
-## 22. Installer
+## 24. Installer
 
 - **Inno Setup** based Windows installer
 - App: "Electrical Store" v1.0.0, Windows x64

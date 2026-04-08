@@ -708,8 +708,8 @@ class _InvoiceDetailDialogState extends State<_InvoiceDetailDialog> {
           ),
         ],
       ),
-      content: SizedBox(
-        width: 450,
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 450),
         child: Form(
           key: _formKey,
           child: Column(

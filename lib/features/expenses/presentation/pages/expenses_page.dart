@@ -195,7 +195,10 @@ class _ExpensesPageState extends State<ExpensesPage> {
               const SizedBox(height: 24),
 
               // Filters
-              Row(
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   // Date range picker
                   OutlinedButton.icon(
@@ -207,7 +210,6 @@ class _ExpensesPageState extends State<ExpensesPage> {
                           : LocalizationService().get('selectDateRange'),
                     ),
                   ),
-                  const SizedBox(width: 16),
 
                   // Category filter
                   DropdownButton<String?>(
@@ -228,7 +230,6 @@ class _ExpensesPageState extends State<ExpensesPage> {
                       _loadExpenses();
                     },
                   ),
-                  const Spacer(),
 
                   // Total amount
                   Container(
@@ -239,6 +240,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
                       border: Border.all(color: AppColors.error.withOpacity(0.3)),
                     ),
                     child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(Icons.money_off, color: AppColors.error),
                         const SizedBox(width: 8),

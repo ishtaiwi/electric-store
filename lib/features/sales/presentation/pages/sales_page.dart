@@ -346,211 +346,221 @@ class _SalesPageState extends State<SalesPage> {
           isLoadingMore = state.isLoadingMore;
         }
 
-        return Row(
-          children: [
-            // Left: Products Section
-            Expanded(
-              flex: 3,
-              child: Container(
-                color: Colors.grey[50],
-                child: Column(
-                  children: [
-                    // Search Bar Section
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      color: Colors.white,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Header Row
-                          Row(
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final isNarrow = constraints.maxWidth < 900;
+            final cartWidth = isNarrow ? 280.0 : 380.0;
+
+            return Row(
+              children: [
+                // Left: Products Section
+                Expanded(
+                  child: Container(
+                    color: Colors.grey[50],
+                    child: Column(
+                      children: [
+                        // Search Bar Section
+                        Container(
+                          padding: EdgeInsets.all(isNarrow ? 12 : 20),
+                          color: Colors.white,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)],
+                              // Header Row
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)],
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(Icons.point_of_sale, color: Colors.white, size: 28),
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Icon(Icons.point_of_sale, color: Colors.white, size: 28),
+                                  const SizedBox(width: 16),
+                                  Flexible(
+                                    child: Text(
+                                      l10n.get('newSale'),
+                                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Refresh button
+                                  IconButton(
+                                    onPressed: () {
+                                      context.read<SalesBloc>().add(SalesRefresh());
+                                      _loadCustomers();
+                                    },
+                                    icon: const Icon(Icons.refresh_rounded),
+                                    color: AppColors.primary,
+                                    tooltip: l10n.get('refresh'),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: AppColors.primary.withOpacity(0.1),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Quick quantity selector
+                                  _buildQuickQuantitySelector(),
+                                ],
                               ),
-                              const SizedBox(width: 16),
-                              Text(
-                                l10n.get('newSale'),
-                                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
+                              const SizedBox(height: 20),
+                              // Search Field
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[100],
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: Colors.grey[300]!),
+                                ),
+                                child: TextField(
+                                  controller: _searchController,
+                                  focusNode: _searchFocusNode,
+                                  decoration: InputDecoration(
+                                    hintText: l10n.get('searchProductsOrScan'),
+                                    hintStyle: TextStyle(color: Colors.grey[500]),
+                                    prefixIcon: const Icon(Icons.search, size: 24),
+                                    suffixIcon: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (_searchController.text.isNotEmpty)
+                                          IconButton(
+                                            icon: const Icon(Icons.clear),
+                                            onPressed: () {
+                                              _debounceTimer?.cancel();
+                                              _searchController.clear();
+                                              context.read<SalesBloc>().add(SalesSearchProducts(''));
+                                              setState(() {});
+                                            },
+                                          ),
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          margin: const EdgeInsets.only(right: 8),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: const Icon(Icons.qr_code_scanner, color: AppColors.primary),
+                                        ),
+                                      ],
+                                    ),
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                                  ),
+                                  style: const TextStyle(fontSize: 16),
+                                  onChanged: _onSearchChanged,
+                                  onSubmitted: (value) async {
+                                    if (value.trim().isEmpty) return;
+                                    _handleBarcodeInput(value);
+                                  },
                                 ),
                               ),
-                              const Spacer(),
-                              // Refresh button
-                              IconButton(
-                                onPressed: () {
-                                  context.read<SalesBloc>().add(SalesRefresh());
-                                  _loadCustomers();
-                                },
-                                icon: const Icon(Icons.refresh_rounded),
-                                color: AppColors.primary,
-                                tooltip: l10n.get('refresh'),
-                                style: IconButton.styleFrom(
-                                  backgroundColor: AppColors.primary.withOpacity(0.1),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              // Quick quantity selector
-                              _buildQuickQuantitySelector(),
                             ],
                           ),
-                          const SizedBox(height: 20),
-                          // Search Field
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.grey[100],
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.grey[300]!),
-                            ),
-                            child: TextField(
-                              controller: _searchController,
-                              focusNode: _searchFocusNode,
-                              decoration: InputDecoration(
-                                hintText: l10n.get('searchProductsOrScan'),
-                                hintStyle: TextStyle(color: Colors.grey[500]),
-                                prefixIcon: const Icon(Icons.search, size: 24),
-                                suffixIcon: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (_searchController.text.isNotEmpty)
-                                      IconButton(
-                                        icon: const Icon(Icons.clear),
-                                        onPressed: () {
-                                          _debounceTimer?.cancel();
-                                          _searchController.clear();
-                                          context.read<SalesBloc>().add(SalesSearchProducts(''));
-                                          setState(() {});
-                                        },
-                                      ),
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      margin: const EdgeInsets.only(right: 8),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primary.withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: const Icon(Icons.qr_code_scanner, color: AppColors.primary),
-                                    ),
-                                  ],
-                                ),
-                                border: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                              ),
-                              style: const TextStyle(fontSize: 16),
-                              onChanged: _onSearchChanged,
-                              onSubmitted: (value) async {
-                                if (value.trim().isEmpty) return;
-                                _handleBarcodeInput(value);
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    
-                    // Products Table
-                    Expanded(
-                      child: state is SalesLoading
-                          ? _buildLoadingSkeleton()
-                          : products.isEmpty
-                              ? _buildEmptyProductsState(l10n)
-                              : _buildProductsTable(products, l10n, hasMore, isLoadingMore),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Right: Cart Section
-            Container(
-              width: 380,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 20,
-                    offset: const Offset(-5, 0),
-                  ),
-                ],
-              ),
-              child: Column(
-                children: [
-                  // Cart Header
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.05),
-                      border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.shopping_cart, color: Colors.white),
                         ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              l10n.get('cart'),
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                            ),
-                            Text(
-                              '${cart.length} ${l10n.get('items')}',
-                              style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                            ),
-                          ],
+                        
+                        // Products Table
+                        Expanded(
+                          child: state is SalesLoading
+                              ? _buildLoadingSkeleton()
+                              : products.isEmpty
+                                  ? _buildEmptyProductsState(l10n)
+                                  : _buildProductsTable(products, l10n, hasMore, isLoadingMore),
                         ),
-                        const Spacer(),
-                        // Add Custom Product Button
-                        IconButton(
-                          onPressed: () => _showAddCustomProductDialog(l10n),
-                          icon: const Icon(Icons.add_circle_outline),
-                          color: AppColors.primary,
-                          tooltip: l10n.get('addCustomProduct'),
-                        ),
-                        if (cart.isNotEmpty)
-                          IconButton(
-                            onPressed: () => context.read<SalesBloc>().add(SalesClearCart()),
-                            icon: const Icon(Icons.delete_sweep),
-                            color: AppColors.error,
-                            tooltip: l10n.get('clear'),
-                          ),
                       ],
                     ),
                   ),
+                ),
 
-                  // Cart Items
-                  Expanded(
-                    child: cart.isEmpty
-                        ? _buildEmptyCartState(l10n)
-                        : ListView.builder(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            itemCount: cart.length,
-                            itemBuilder: (context, index) => _buildCartItem(cart[index], l10n),
-                          ),
+                // Right: Cart Section
+                Container(
+                  width: cartWidth,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 20,
+                        offset: const Offset(-5, 0),
+                      ),
+                    ],
                   ),
+                  child: Column(
+                    children: [
+                      // Cart Header
+                      Container(
+                        padding: EdgeInsets.all(isNarrow ? 12 : 20),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.05),
+                          border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.shopping_cart, color: Colors.white),
+                            ),
+                            const SizedBox(width: 12),
+                            Flexible(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    l10n.get('cart'),
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                                  ),
+                                  Text(
+                                    '${cart.length} ${l10n.get('items')}',
+                                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Add Custom Product Button
+                            IconButton(
+                              onPressed: () => _showAddCustomProductDialog(l10n),
+                              icon: const Icon(Icons.add_circle_outline),
+                              color: AppColors.primary,
+                              tooltip: l10n.get('addCustomProduct'),
+                            ),
+                            if (cart.isNotEmpty)
+                              IconButton(
+                                onPressed: () => context.read<SalesBloc>().add(SalesClearCart()),
+                                icon: const Icon(Icons.delete_sweep),
+                                color: AppColors.error,
+                                tooltip: l10n.get('clear'),
+                              ),
+                          ],
+                        ),
+                      ),
 
-                  // Checkout Section
-                  if (cart.isNotEmpty) _buildCheckoutSection(subtotal, discount, total, l10n),
-                ],
-              ),
-            ),
-          ],
+                      // Cart Items
+                      Expanded(
+                        child: cart.isEmpty
+                            ? _buildEmptyCartState(l10n)
+                            : ListView.builder(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                itemCount: cart.length,
+                                itemBuilder: (context, index) => _buildCartItem(cart[index], l10n),
+                              ),
+                      ),
+
+                      // Checkout Section
+                      if (cart.isNotEmpty) _buildCheckoutSection(subtotal, discount, total, l10n),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -590,8 +600,8 @@ class _SalesPageState extends State<SalesPage> {
         ),
         content: Form(
           key: formKey,
-          child: SizedBox(
-            width: 400,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

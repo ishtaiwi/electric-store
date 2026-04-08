@@ -497,43 +497,56 @@ class _CustomerAccountStatementPageState
   Widget _buildSummaryCards() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
-      child: Row(
-        children: [
-          _buildSummaryCard(
-            icon: Icons.receipt_long,
-            title: _localization.get('totalInvoices'),
-            value: '${_invoices.length}',
-            color: AppColors.primary,
-          ),
-          const SizedBox(width: 16),
-          _buildSummaryCard(
-            icon: Icons.shopping_cart,
-            title: _localization.get('totalPurchases'),
-            value: '₪${_totalPurchases.toStringAsFixed(2)}',
-            color: AppColors.info,
-          ),
-          const SizedBox(width: 16),
-          _buildSummaryCard(
-            icon: Icons.payments,
-            title: _localization.get('totalPaid'),
-            value: '₪${_totalPaid.toStringAsFixed(2)}',
-            color: AppColors.success,
-          ),
-          const SizedBox(width: 16),
-          _buildSummaryCard(
-            icon: Icons.check_circle,
-            title: _localization.get('paidInvoices'),
-            value: '$_paidInvoiceCount',
-            color: AppColors.success,
-          ),
-          const SizedBox(width: 16),
-          _buildSummaryCard(
-            icon: Icons.warning,
-            title: _localization.get('unpaidInvoices'),
-            value: '$_unpaidInvoiceCount',
-            color: AppColors.error,
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 700;
+          final cards = [
+            _buildSummaryCard(
+              icon: Icons.receipt_long,
+              title: _localization.get('totalInvoices'),
+              value: '${_invoices.length}',
+              color: AppColors.primary,
+            ),
+            _buildSummaryCard(
+              icon: Icons.shopping_cart,
+              title: _localization.get('totalPurchases'),
+              value: '₪${_totalPurchases.toStringAsFixed(2)}',
+              color: AppColors.info,
+            ),
+            _buildSummaryCard(
+              icon: Icons.payments,
+              title: _localization.get('totalPaid'),
+              value: '₪${_totalPaid.toStringAsFixed(2)}',
+              color: AppColors.success,
+            ),
+            _buildSummaryCard(
+              icon: Icons.check_circle,
+              title: _localization.get('paidInvoices'),
+              value: '$_paidInvoiceCount',
+              color: AppColors.success,
+            ),
+            _buildSummaryCard(
+              icon: Icons.warning,
+              title: _localization.get('unpaidInvoices'),
+              value: '$_unpaidInvoiceCount',
+              color: AppColors.error,
+            ),
+          ];
+
+          if (isNarrow) {
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: cards,
+            );
+          }
+          return Row(
+            children: cards
+                .expand((card) => [card, const SizedBox(width: 16)])
+                .toList()
+              ..removeLast(),
+          );
+        },
       ),
     );
   }
@@ -662,7 +675,10 @@ class _CustomerAccountStatementPageState
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 Text(
                                   '#${invoice.invoiceNumber}',
@@ -671,9 +687,7 @@ class _CustomerAccountStatementPageState
                                     fontSize: 18,
                                   ),
                                 ),
-                                const SizedBox(width: 12),
                                 _buildStatusBadge(invoice.paymentStatus),
-                                const SizedBox(width: 8),
                                 _buildPaymentMethodBadge(invoice.paymentMethod),
                               ],
                             ),

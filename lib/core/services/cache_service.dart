@@ -214,6 +214,9 @@ class CacheKeys {
   static String customerById(int id) => 'customer_$id';
   static String invoiceById(int id) => 'invoice_$id';
   static String supplierById(int id) => 'supplier_$id';
+  static String supplierInvoices(int supplierId) => 'supplier_invoices_$supplierId';
+  static String supplierFinancialSummary(int supplierId) => 'supplier_financial_$supplierId';
+  static const String globalSupplierOutstanding = 'global_supplier_outstanding';
   static String expensesByDateRange(String start, String end) => 'expenses_${start}_$end';
   static String reportProfit(String start, String end) => 'report_profit_${start}_$end';
   static String bestSelling(int limit) => 'best_selling_$limit';

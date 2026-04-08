@@ -56,9 +56,10 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
 
         return AlertDialog(
           title: const Text(AppStrings.checkout),
-          content: SizedBox(
-            width: 400,
-            child: Column(
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: SingleChildScrollView(
+              child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -316,6 +317,7 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
                 ],
               ],
             ),
+          ),
           ),
           actions: [
             TextButton(

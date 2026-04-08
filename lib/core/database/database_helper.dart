@@ -69,7 +69,7 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 9,
+      version: 10,
       onCreate: dbExists ? null : _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: _onConfigure,
@@ -184,6 +184,37 @@ class DatabaseHelper {
         await db.execute('ALTER TABLE sales ADD COLUMN note TEXT');
       }
     }
+    // Migration: v9 -> v10: Add supplier_invoices and supplier_payments tables
+    if (oldVersion < 10) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS supplier_invoices (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+          invoice_number TEXT NOT NULL,
+          invoice_date TEXT NOT NULL,
+          total_amount REAL NOT NULL DEFAULT 0,
+          paid_amount REAL NOT NULL DEFAULT 0,
+          file_path TEXT,
+          file_name TEXT,
+          file_type TEXT,
+          notes TEXT,
+          created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS supplier_payments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          supplier_invoice_id INTEGER NOT NULL REFERENCES supplier_invoices(id),
+          amount REAL NOT NULL,
+          payment_date TEXT NOT NULL,
+          notes TEXT,
+          created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_supplier_invoices_supplier ON supplier_invoices(supplier_id)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_supplier_invoices_number ON supplier_invoices(invoice_number)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_supplier_payments_invoice ON supplier_payments(supplier_invoice_id)');
+    }
   }
 
   /// Creates all performance-critical indexes.
@@ -269,6 +300,35 @@ class DatabaseHelper {
         file_type TEXT NOT NULL DEFAULT 'pdf',
         comment TEXT,
         upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
+    // Supplier invoices table
+    await db.execute('''
+      CREATE TABLE supplier_invoices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+        invoice_number TEXT NOT NULL,
+        invoice_date TEXT NOT NULL,
+        total_amount REAL NOT NULL DEFAULT 0,
+        paid_amount REAL NOT NULL DEFAULT 0,
+        file_path TEXT,
+        file_name TEXT,
+        file_type TEXT,
+        notes TEXT,
+        created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
+    // Supplier payments table
+    await db.execute('''
+      CREATE TABLE supplier_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        supplier_invoice_id INTEGER NOT NULL REFERENCES supplier_invoices(id),
+        amount REAL NOT NULL,
+        payment_date TEXT NOT NULL,
+        notes TEXT,
+        created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     ''');
 
@@ -500,6 +560,9 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_suppliers_name ON suppliers(name)');
     await db.execute('CREATE INDEX idx_supplier_attachments_supplier ON supplier_attachments(supplier_id)');
     await db.execute('CREATE INDEX idx_products_supplier ON products(supplier_id)');
+    await db.execute('CREATE INDEX idx_supplier_invoices_supplier ON supplier_invoices(supplier_id)');
+    await db.execute('CREATE INDEX idx_supplier_invoices_number ON supplier_invoices(invoice_number)');
+    await db.execute('CREATE INDEX idx_supplier_payments_invoice ON supplier_payments(supplier_invoice_id)');
 
     // Create performance indexes (sales, invoices, expenses, etc.)
     await _createPerformanceIndexes(db);

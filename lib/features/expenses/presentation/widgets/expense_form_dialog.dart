@@ -115,8 +115,8 @@ class _ExpenseFormDialogState extends State<ExpenseFormDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(isEditing ? LocalizationService().get('editExpense') : LocalizationService().get('addExpense')),
-      content: SizedBox(
-        width: 400,
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
         child: Form(
           key: _formKey,
           child: Column(

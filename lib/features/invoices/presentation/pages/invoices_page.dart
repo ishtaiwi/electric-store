@@ -260,12 +260,15 @@ class _InvoicesPageState extends State<InvoicesPage> {
               ),
               const SizedBox(height: 24),
 
-              // Filters
-              Row(
+              // Filters - Row 1: Search + Date + Actions
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   // Search field
-                  SizedBox(
-                    width: 250,
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 250),
                     child: TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
@@ -291,7 +294,6 @@ class _InvoicesPageState extends State<InvoicesPage> {
                       },
                     ),
                   ),
-                  const SizedBox(width: 16),
                   
                   // Date range picker
                   OutlinedButton.icon(
@@ -303,7 +305,6 @@ class _InvoicesPageState extends State<InvoicesPage> {
                           : LocalizationService().get('selectDateRange'),
                     ),
                   ),
-                  const SizedBox(width: 8),
 
                   // Show All button
                   OutlinedButton.icon(
@@ -317,7 +318,6 @@ class _InvoicesPageState extends State<InvoicesPage> {
                           : null,
                     ),
                   ),
-                  const SizedBox(width: 8),
                   
                   // Refresh button
                   IconButton(
@@ -326,7 +326,6 @@ class _InvoicesPageState extends State<InvoicesPage> {
                     tooltip: LocalizationService().get('refresh'),
                     color: AppColors.primary,
                   ),
-                  const SizedBox(width: 16),
 
                   // Payment method filter
                   DropdownButton<String?>(
@@ -345,7 +344,6 @@ class _InvoicesPageState extends State<InvoicesPage> {
                       setState(() => _selectedPaymentMethod = value);
                     },
                   ),
-                  const Spacer(),
 
                   // Total amount
                   Container(
@@ -356,6 +354,7 @@ class _InvoicesPageState extends State<InvoicesPage> {
                       border: Border.all(color: AppColors.success.withOpacity(0.3)),
                     ),
                     child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(Icons.attach_money, color: AppColors.success),
                         const SizedBox(width: 8),

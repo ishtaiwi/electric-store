@@ -1,6 +1,6 @@
 -- ============================================================
 -- Electrical Store Management System - Database Schema
--- Database: SQLite (Version 4)
+-- Database: SQLite (Version 10)
 -- ============================================================
 
 -- ============================================================
@@ -180,6 +180,33 @@ CREATE TABLE budget (
     UNIQUE(category, year, month)
 );
 
+-- Supplier invoices table
+-- Tracks invoices from suppliers with payment status
+CREATE TABLE supplier_invoices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+    invoice_number TEXT NOT NULL,
+    invoice_date TEXT NOT NULL,
+    total_amount REAL NOT NULL DEFAULT 0,
+    paid_amount REAL NOT NULL DEFAULT 0,
+    file_path TEXT,
+    file_name TEXT,
+    file_type TEXT,
+    notes TEXT,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Supplier payments table
+-- Records individual payments against supplier invoices
+CREATE TABLE supplier_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_invoice_id INTEGER NOT NULL REFERENCES supplier_invoices(id),
+    amount REAL NOT NULL,
+    payment_date TEXT NOT NULL,
+    notes TEXT,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Store settings table
 -- Key-value store for app configuration
 CREATE TABLE store_settings (
@@ -228,6 +255,9 @@ CREATE INDEX idx_budget_year_month ON budget(year, month);
 CREATE INDEX idx_additional_income_date ON additional_income(income_date);
 CREATE INDEX idx_customers_name ON customers(name);
 CREATE INDEX idx_suppliers_phone ON suppliers(phone);
+CREATE INDEX idx_supplier_invoices_supplier ON supplier_invoices(supplier_id);
+CREATE INDEX idx_supplier_invoices_number ON supplier_invoices(invoice_number);
+CREATE INDEX idx_supplier_payments_invoice ON supplier_payments(supplier_invoice_id);
 
 -- ============================================================
 -- DEFAULT DATA

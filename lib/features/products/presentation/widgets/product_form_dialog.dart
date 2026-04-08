@@ -110,8 +110,8 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
     final l10n = LocalizationService();
     return AlertDialog(
       title: Text(isEditing ? l10n.get('editProduct') : l10n.get('addProduct')),
-      content: SizedBox(
-        width: 500,
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
