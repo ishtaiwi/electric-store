@@ -108,207 +108,278 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = LocalizationService();
-    return AlertDialog(
-      title: Text(isEditing ? l10n.get('editProduct') : l10n.get('addProduct')),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 500),
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Name
-                TextFormField(
-                  controller: _nameController,
-                  decoration: InputDecoration(
-                    labelText: l10n.get('productName'),
-                    prefixIcon: const Icon(Icons.inventory_2),
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 60, vertical: 30),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 560,
+          maxHeight: MediaQuery.of(context).size.height * 0.88,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      isEditing ? Icons.edit : Icons.inventory_2,
+                      color: Colors.white, size: 22,
+                    ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return LocalizationService().get('productNameRequired');
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Barcode
-                TextFormField(
-                  controller: _barcodeController,
-                  decoration: InputDecoration(
-                    labelText: l10n.get('barcode'),
-                    prefixIcon: const Icon(Icons.qr_code),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      isEditing ? l10n.get('editProduct') : l10n.get('addProduct'),
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-
-                // Price Row
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _priceController,
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            // Body
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Name
+                      TextFormField(
+                        controller: _nameController,
                         decoration: InputDecoration(
-                          labelText: l10n.get('price'),
-                          prefixIcon: const Icon(Icons.attach_money),
+                          labelText: l10n.get('productName'),
+                          prefixIcon: const Icon(Icons.inventory_2),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-                        ],
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return LocalizationService().get('priceRequired');
-                          }
-                          if (double.tryParse(value) == null) {
-                            return LocalizationService().get('invalidPrice');
+                            return l10n.get('productNameRequired');
                           }
                           return null;
                         },
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _costPriceController,
+                      const SizedBox(height: 16),
+
+                      // Barcode
+                      TextFormField(
+                        controller: _barcodeController,
                         decoration: InputDecoration(
-                          labelText: l10n.get('costPrice'),
-                          prefixIcon: const Icon(Icons.money_off),
+                          labelText: l10n.get('barcode'),
+                          prefixIcon: const Icon(Icons.qr_code),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-                        ],
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return LocalizationService().get('costPriceRequired');
-                          }
-                          if (double.tryParse(value) == null) {
-                            return LocalizationService().get('invalidPrice');
-                          }
-                          return null;
-                        },
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
+                      const SizedBox(height: 16),
 
-                // Quantity Row
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _quantityController,
-                        decoration: InputDecoration(
-                          labelText: l10n.get('quantity'),
-                          prefixIcon: const Icon(Icons.numbers),
-                        ),
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        enabled: !isEditing, // Disable quantity editing, use stock adjustment instead
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _minStockController,
-                        decoration: InputDecoration(
-                          labelText: l10n.get('minStock'),
-                          prefixIcon: const Icon(Icons.warning_amber),
-                        ),
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Note
-                TextFormField(
-                  controller: _noteController,
-                  decoration: InputDecoration(
-                    labelText: LocalizationService().get('notes'),
-                    prefixIcon: const Icon(Icons.note),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Supplier dropdown
-                DropdownButtonFormField<int?>(
-                  value: _selectedSupplierId,
-                  decoration: InputDecoration(
-                    labelText: l10n.get('supplier'),
-                    prefixIcon: const Icon(Icons.local_shipping),
-                  ),
-                  items: [
-                    DropdownMenuItem<int?>(
-                      value: null,
-                      child: Text(l10n.get('noSupplier')),
-                    ),
-                    ..._suppliers.map((s) => DropdownMenuItem<int?>(
-                      value: s.id,
-                      child: Text(s.name),
-                    )),
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedSupplierId = value;
-                      // Also update text field for backward compatibility
-                      if (value != null) {
-                        final selected = _suppliers.firstWhere((s) => s.id == value);
-                        _supplierController.text = selected.name;
-                      } else {
-                        _supplierController.clear();
-                      }
-                    });
-                  },
-                ),
-
-                // Profit margin display
-                if (_priceController.text.isNotEmpty && _costPriceController.text.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.success.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      // Price Row
+                      Row(
                         children: [
-                          const Icon(Icons.trending_up, color: AppColors.success, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${LocalizationService().get('profitMargin')} ₪${_calculateProfit().toStringAsFixed(2)} (${_calculateMargin().toStringAsFixed(1)}%)',
-                            style: const TextStyle(
-                              color: AppColors.success,
-                              fontWeight: FontWeight.w500,
+                          Expanded(
+                            child: TextFormField(
+                              controller: _priceController,
+                              decoration: InputDecoration(
+                                labelText: l10n.get('price'),
+                                prefixIcon: const Icon(Icons.attach_money),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                              ],
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return l10n.get('priceRequired');
+                                }
+                                if (double.tryParse(value) == null) {
+                                  return l10n.get('invalidPrice');
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _costPriceController,
+                              decoration: InputDecoration(
+                                labelText: l10n.get('costPrice'),
+                                prefixIcon: const Icon(Icons.money_off),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                              ],
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return l10n.get('costPriceRequired');
+                                }
+                                if (double.tryParse(value) == null) {
+                                  return l10n.get('invalidPrice');
+                                }
+                                return null;
+                              },
                             ),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 16),
+
+                      // Quantity Row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _quantityController,
+                              decoration: InputDecoration(
+                                labelText: l10n.get('quantity'),
+                                prefixIcon: const Icon(Icons.numbers),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                              enabled: !isEditing, // Disable quantity editing, use stock adjustment instead
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _minStockController,
+                              decoration: InputDecoration(
+                                labelText: l10n.get('minStock'),
+                                prefixIcon: const Icon(Icons.warning_amber),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Note
+                      TextFormField(
+                        controller: _noteController,
+                        decoration: InputDecoration(
+                          labelText: l10n.get('notes'),
+                          prefixIcon: const Icon(Icons.note),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Supplier dropdown
+                      DropdownButtonFormField<int?>(
+                        value: _selectedSupplierId,
+                        decoration: InputDecoration(
+                          labelText: l10n.get('supplier'),
+                          prefixIcon: const Icon(Icons.local_shipping),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        items: [
+                          DropdownMenuItem<int?>(
+                            value: null,
+                            child: Text(l10n.get('noSupplier')),
+                          ),
+                          ..._suppliers.map((s) => DropdownMenuItem<int?>(
+                            value: s.id,
+                            child: Text(s.name),
+                          )),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedSupplierId = value;
+                            // Also update text field for backward compatibility
+                            if (value != null) {
+                              final selected = _suppliers.firstWhere((s) => s.id == value);
+                              _supplierController.text = selected.name;
+                            } else {
+                              _supplierController.clear();
+                            }
+                          });
+                        },
+                      ),
+
+                      // Profit margin display
+                      if (_priceController.text.isNotEmpty && _costPriceController.text.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppColors.success.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.trending_up, color: AppColors.success, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${l10n.get('profitMargin')} ₪${_calculateProfit().toStringAsFixed(2)} (${_calculateMargin().toStringAsFixed(1)}%)',
+                                  style: const TextStyle(
+                                    color: AppColors.success,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // Actions
+            Container(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(l10n.get('cancel')),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: _save,
+                    icon: Icon(isEditing ? Icons.save : Icons.add, size: 18),
+                    label: Text(isEditing ? l10n.get('save') : l10n.get('add')),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(l10n.get('cancel')),
-        ),
-        ElevatedButton(
-          onPressed: _save,
-          child: Text(isEditing ? l10n.get('save') : l10n.get('add')),
-        ),
-      ],
     );
   }
 

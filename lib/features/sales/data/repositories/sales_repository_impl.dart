@@ -68,6 +68,18 @@ class SalesRepositoryImpl implements SalesRepository {
         'created_by': userId,
       });
 
+      // Record initial payment in customer_payments table if amount > 0 and customer exists
+      if (actualPaidAmount > 0 && customerId != null) {
+        await txn.insert('customer_payments', {
+          'invoice_id': invoiceId,
+          'customer_id': customerId,
+          'amount': actualPaidAmount,
+          'payment_date': DateTime.now().toIso8601String(),
+          'payment_method': paymentMethod == 'cheque' ? 'cheque' : 'cash',
+          'notes': 'Initial payment at checkout',
+        });
+      }
+
       // Create sale items and update product quantities
       for (final item in items) {
         final itemTotal = item.totalPrice;

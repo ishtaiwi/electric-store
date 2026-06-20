@@ -80,117 +80,186 @@ class _CustomerFormDialogState extends State<CustomerFormDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(isEditing ? LocalizationService().get('editCustomer') : LocalizationService().get('addCustomer')),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400),
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Name
-                TextFormField(
-                  controller: _nameController,
-                  decoration: InputDecoration(
-                    labelText: '${LocalizationService().get('name')} *',
-                    prefixIcon: const Icon(Icons.person),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return LocalizationService().get('nameRequired');
-                    }
-                    return null;
-                  },
-                  textCapitalization: TextCapitalization.words,
-                ),
-                const SizedBox(height: 16),
-
-                // Phone
-                TextFormField(
-                  controller: _phoneController,
-                  decoration: InputDecoration(
-                    labelText: LocalizationService().get('phone'),
-                    prefixIcon: const Icon(Icons.phone),
-                  ),
-                  keyboardType: TextInputType.phone,
-                ),
-                const SizedBox(height: 16),
-
-                // Email
-                TextFormField(
-                  controller: _emailController,
-                  decoration: InputDecoration(
-                    labelText: LocalizationService().get('email'),
-                    prefixIcon: const Icon(Icons.email),
-                  ),
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (value) {
-                    if (value != null && value.isNotEmpty) {
-                      final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-                      if (!emailRegex.hasMatch(value)) {
-                        return LocalizationService().get('validEmail');
-                      }
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Address
-                TextFormField(
-                  controller: _addressController,
-                  decoration: InputDecoration(
-                    labelText: LocalizationService().get('address'),
-                    prefixIcon: const Icon(Icons.location_on),
-                  ),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 16),
-
-                // Balance (only when editing)
-                if (isEditing) ...[
-                  TextFormField(
-                    controller: _balanceController,
-                    decoration: InputDecoration(
-                      labelText: LocalizationService().get('balance'),
-                      prefixIcon: const Icon(Icons.account_balance_wallet),
-                      helperText: LocalizationService().get('balanceHint'),
-                      helperStyle: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 11,
-                      ),
+    final loc = LocalizationService();
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 80, vertical: 40),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 520,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                      signed: true,
+                    child: Icon(
+                      isEditing ? Icons.edit : Icons.person_add,
+                      color: Colors.white, size: 22,
                     ),
-                    validator: (value) {
-                      if (value != null && value.isNotEmpty) {
-                        if (double.tryParse(value) == null) {
-                          return LocalizationService().get('validNumber');
-                        }
-                      }
-                      return null;
-                    },
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      isEditing ? loc.get('editCustomer') : loc.get('addCustomer'),
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
                   ),
                 ],
-              ],
+              ),
             ),
-          ),
+            // Body
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Name
+                      TextFormField(
+                        controller: _nameController,
+                        decoration: InputDecoration(
+                          labelText: '${loc.get('name')} *',
+                          prefixIcon: const Icon(Icons.person),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return loc.get('nameRequired');
+                          }
+                          return null;
+                        },
+                        textCapitalization: TextCapitalization.words,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Phone
+                      TextFormField(
+                        controller: _phoneController,
+                        decoration: InputDecoration(
+                          labelText: loc.get('phone'),
+                          prefixIcon: const Icon(Icons.phone),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        keyboardType: TextInputType.phone,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Email
+                      TextFormField(
+                        controller: _emailController,
+                        decoration: InputDecoration(
+                          labelText: loc.get('email'),
+                          prefixIcon: const Icon(Icons.email),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (value) {
+                          if (value != null && value.isNotEmpty) {
+                            final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                            if (!emailRegex.hasMatch(value)) {
+                              return loc.get('validEmail');
+                            }
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Address
+                      TextFormField(
+                        controller: _addressController,
+                        decoration: InputDecoration(
+                          labelText: loc.get('address'),
+                          prefixIcon: const Icon(Icons.location_on),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Balance (only when editing)
+                      if (isEditing) ...[
+                        TextFormField(
+                          controller: _balanceController,
+                          decoration: InputDecoration(
+                            labelText: loc.get('balance'),
+                            prefixIcon: const Icon(Icons.account_balance_wallet),
+                            helperText: loc.get('balanceHint'),
+                            helperStyle: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 11,
+                            ),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                            signed: true,
+                          ),
+                          validator: (value) {
+                            if (value != null && value.isNotEmpty) {
+                              if (double.tryParse(value) == null) {
+                                return loc.get('validNumber');
+                              }
+                            }
+                            return null;
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // Actions
+            Container(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(loc.get('cancel')),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: _submit,
+                    icon: Icon(isEditing ? Icons.save : Icons.add, size: 18),
+                    label: Text(isEditing ? loc.get('update') : loc.get('add')),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(LocalizationService().get('cancel')),
-        ),
-        ElevatedButton(
-          onPressed: _submit,
-          child: Text(isEditing ? LocalizationService().get('update') : LocalizationService().get('add')),
-        ),
-      ],
     );
   }
 }

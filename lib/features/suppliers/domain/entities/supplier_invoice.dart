@@ -4,6 +4,7 @@ enum InvoicePaymentStatus {
   paid,
   partiallyPaid,
   unpaid,
+  overpaid,
 }
 
 class SupplierInvoice extends Equatable {
@@ -35,15 +36,22 @@ class SupplierInvoice extends Equatable {
 
   double get remainingAmount => totalAmount - paidAmount;
 
+  /// How much credit exists if overpaid (positive = credit to you)
+  double get creditAmount => paidAmount > totalAmount ? paidAmount - totalAmount : 0;
+
   InvoicePaymentStatus get paymentStatus {
-    if (paidAmount >= totalAmount) return InvoicePaymentStatus.paid;
+    if (paidAmount > totalAmount) return InvoicePaymentStatus.overpaid;
+    if (paidAmount >= totalAmount && totalAmount > 0) return InvoicePaymentStatus.paid;
     if (paidAmount > 0) return InvoicePaymentStatus.partiallyPaid;
     return InvoicePaymentStatus.unpaid;
   }
 
   bool get isPaid => paymentStatus == InvoicePaymentStatus.paid;
+  bool get isOverpaid => paymentStatus == InvoicePaymentStatus.overpaid;
   bool get isPartiallyPaid => paymentStatus == InvoicePaymentStatus.partiallyPaid;
   bool get isUnpaid => paymentStatus == InvoicePaymentStatus.unpaid;
+  /// True when fully paid or overpaid (no remaining amount owed)
+  bool get isSettled => isPaid || isOverpaid;
 
   factory SupplierInvoice.fromMap(Map<String, dynamic> map) {
     return SupplierInvoice(

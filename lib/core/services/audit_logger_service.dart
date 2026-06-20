@@ -37,6 +37,8 @@ enum AuditAction {
   supplierInvoiceUpdated('SUPPLIER_INVOICE_UPDATED'),
   supplierInvoiceDeleted('SUPPLIER_INVOICE_DELETED'),
   supplierPaymentRecorded('SUPPLIER_PAYMENT_RECORDED'),
+  customerPaymentRecorded('CUSTOMER_PAYMENT_RECORDED'),
+  customerPaymentDeleted('CUSTOMER_PAYMENT_DELETED'),
   backupCreated('BACKUP_CREATED'),
   backupRestored('BACKUP_RESTORED'),
   settingsChanged('SETTINGS_CHANGED'),

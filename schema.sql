@@ -203,6 +203,8 @@ CREATE TABLE supplier_payments (
     supplier_invoice_id INTEGER NOT NULL REFERENCES supplier_invoices(id),
     amount REAL NOT NULL,
     payment_date TEXT NOT NULL,
+    payment_method TEXT DEFAULT 'cash',
+    cheque_number TEXT,
     notes TEXT,
     created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

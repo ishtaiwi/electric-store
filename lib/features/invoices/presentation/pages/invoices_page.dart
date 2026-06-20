@@ -132,6 +132,8 @@ class _InvoicesPageState extends State<InvoicesPage> {
   
   String _getPaymentStatusLabel(String status) {
     switch (status) {
+      case 'overpaid':
+        return LocalizationService().get('overpaid');
       case 'paid':
         return LocalizationService().get('paid');
       case 'partial':
@@ -145,6 +147,8 @@ class _InvoicesPageState extends State<InvoicesPage> {
   
   Color _getPaymentStatusColor(String status) {
     switch (status) {
+      case 'overpaid':
+        return AppColors.info;
       case 'paid':
         return AppColors.success;
       case 'partial':

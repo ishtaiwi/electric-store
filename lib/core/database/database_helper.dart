@@ -69,7 +69,7 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 10,
+      version: 12,
       onCreate: dbExists ? null : _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: _onConfigure,
@@ -215,6 +215,46 @@ class DatabaseHelper {
       await db.execute('CREATE INDEX IF NOT EXISTS idx_supplier_invoices_number ON supplier_invoices(invoice_number)');
       await db.execute('CREATE INDEX IF NOT EXISTS idx_supplier_payments_invoice ON supplier_payments(supplier_invoice_id)');
     }
+    // Migration: v10 -> v11: Add payment_method and cheque_number to supplier_payments
+    if (oldVersion < 11) {
+      final tableInfo = await db.rawQuery('PRAGMA table_info(supplier_payments)');
+      final hasPaymentMethod = tableInfo.any((col) => col['name'] == 'payment_method');
+      if (!hasPaymentMethod) {
+        await db.execute("ALTER TABLE supplier_payments ADD COLUMN payment_method TEXT DEFAULT 'cash'");
+      }
+      final hasChequeNumber = tableInfo.any((col) => col['name'] == 'cheque_number');
+      if (!hasChequeNumber) {
+        await db.execute('ALTER TABLE supplier_payments ADD COLUMN cheque_number TEXT');
+      }
+    }
+    // Migration: v11 -> v12: Add customer_payments table
+    if (oldVersion < 12) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS customer_payments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+          customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+          amount REAL NOT NULL,
+          payment_date TEXT NOT NULL,
+          payment_method TEXT DEFAULT 'cash',
+          cheque_number TEXT,
+          notes TEXT,
+          created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_customer_payments_invoice ON customer_payments(invoice_id)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_customer_payments_customer ON customer_payments(customer_id)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_customer_payments_date ON customer_payments(payment_date)');
+      
+      // Migrate existing paid amounts into customer_payments records
+      // For invoices that have paid_amount > 0, create a legacy payment entry
+      await db.execute('''
+        INSERT INTO customer_payments (invoice_id, customer_id, amount, payment_date, payment_method, notes)
+        SELECT i.id, i.customer_id, i.paid_amount, COALESCE(i.created_date, datetime('now')), i.payment_method, 'Migrated from legacy payment'
+        FROM invoices i
+        WHERE i.paid_amount > 0 AND i.customer_id IS NOT NULL
+      ''');
+    }
   }
 
   /// Creates all performance-critical indexes.
@@ -327,6 +367,23 @@ class DatabaseHelper {
         supplier_invoice_id INTEGER NOT NULL REFERENCES supplier_invoices(id),
         amount REAL NOT NULL,
         payment_date TEXT NOT NULL,
+        payment_method TEXT DEFAULT 'cash',
+        cheque_number TEXT,
+        notes TEXT,
+        created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
+    // Customer payments table
+    await db.execute('''
+      CREATE TABLE customer_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+        customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+        amount REAL NOT NULL,
+        payment_date TEXT NOT NULL,
+        payment_method TEXT DEFAULT 'cash',
+        cheque_number TEXT,
         notes TEXT,
         created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )

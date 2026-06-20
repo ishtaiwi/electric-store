@@ -6,6 +6,7 @@ import '../../../../core/services/localization_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/customer.dart';
 import '../bloc/customer_bloc.dart';
+import '../widgets/customer_financial_dialog.dart';
 import '../widgets/customer_form_dialog.dart';
 import 'customer_account_statement_page.dart';
 
@@ -243,6 +244,22 @@ class _CustomersPageState extends State<CustomersPage> {
                                   Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.account_balance_wallet, size: 20),
+                                        onPressed: () {
+                                          showDialog(
+                                            context: context,
+                                            builder: (dialogContext) => BlocProvider.value(
+                                              value: context.read<CustomerBloc>(),
+                                              child: CustomerFinancialDialog(customer: customer),
+                                            ),
+                                          ).then((_) {
+                                            context.read<CustomerBloc>().add(CustomerRefresh());
+                                          });
+                                        },
+                                        tooltip: LocalizationService().get('customerFinancial'),
+                                        color: AppColors.success,
+                                      ),
                                       IconButton(
                                         icon: const Icon(Icons.receipt_long, size: 20),
                                         onPressed: () => _showAccountStatement(customer),

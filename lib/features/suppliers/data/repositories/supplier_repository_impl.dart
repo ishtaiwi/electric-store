@@ -420,6 +420,18 @@ class SupplierRepositoryImpl implements SupplierRepository {
   }
 
   @override
+  Future<List<SupplierPayment>> getPaymentsBySupplier(int supplierId) async {
+    final db = await _databaseHelper.database;
+    final result = await db.rawQuery('''
+      SELECT sp.* FROM supplier_payments sp
+      INNER JOIN supplier_invoices si ON sp.supplier_invoice_id = si.id
+      WHERE si.supplier_id = ?
+      ORDER BY sp.payment_date DESC
+    ''', [supplierId]);
+    return result.map((map) => SupplierPayment.fromMap(map)).toList();
+  }
+
+  @override
   Future<int> recordPayment(SupplierPayment payment) async {
     final db = await _databaseHelper.database;
 
@@ -435,10 +447,6 @@ class SupplierRepositoryImpl implements SupplierRepository {
 
     final invoice = SupplierInvoice.fromMap(invoiceResult.first);
     final newPaidAmount = invoice.paidAmount + payment.amount;
-
-    if (newPaidAmount > invoice.totalAmount) {
-      throw Exception('Payment amount exceeds remaining balance');
-    }
 
     // Insert payment record
     final paymentId = await db.insert('supplier_payments', payment.toMap());
@@ -551,8 +559,12 @@ class SupplierRepositoryImpl implements SupplierRepository {
     ''', [supplierId]);
 
     // Count by status
+    final overpaidCount = await db.rawQuery(
+      'SELECT COUNT(*) as c FROM supplier_invoices WHERE supplier_id = ? AND paid_amount > total_amount',
+      [supplierId],
+    );
     final paidCount = await db.rawQuery(
-      'SELECT COUNT(*) as c FROM supplier_invoices WHERE supplier_id = ? AND paid_amount >= total_amount AND total_amount > 0',
+      'SELECT COUNT(*) as c FROM supplier_invoices WHERE supplier_id = ? AND paid_amount = total_amount AND total_amount > 0',
       [supplierId],
     );
     final partialCount = await db.rawQuery(
@@ -570,6 +582,7 @@ class SupplierRepositoryImpl implements SupplierRepository {
       'total_amount': (row['total_amount'] as num?)?.toDouble() ?? 0,
       'total_paid': (row['total_paid'] as num?)?.toDouble() ?? 0,
       'total_outstanding': (row['total_outstanding'] as num?)?.toDouble() ?? 0,
+      'overpaid_count': (overpaidCount.first['c'] as num?)?.toInt() ?? 0,
       'paid_count': (paidCount.first['c'] as num?)?.toInt() ?? 0,
       'partial_count': (partialCount.first['c'] as num?)?.toInt() ?? 0,
       'unpaid_count': (unpaidCount.first['c'] as num?)?.toInt() ?? 0,
@@ -595,7 +608,7 @@ class SupplierRepositoryImpl implements SupplierRepository {
       FROM suppliers s
       LEFT JOIN supplier_invoices si ON s.id = si.supplier_id
       GROUP BY s.id, s.name, s.phone
-      HAVING outstanding > 0
+      HAVING outstanding != 0
       ORDER BY outstanding DESC
     ''');
     return result;

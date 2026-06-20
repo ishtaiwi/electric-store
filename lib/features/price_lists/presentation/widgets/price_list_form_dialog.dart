@@ -350,6 +350,7 @@ class _PriceListFormDialogState extends State<PriceListFormDialog> {
                                         flex: 2,
                                         child: DropdownButtonFormField<Customer?>(
                                           value: _selectedCustomer,
+                                          isExpanded: true,
                                           decoration: InputDecoration(
                                             labelText: l10n.get('customerOptional'),
                                             prefixIcon: const Icon(Icons.person_outline, size: 20),
@@ -357,8 +358,8 @@ class _PriceListFormDialogState extends State<PriceListFormDialog> {
                                             isDense: true,
                                           ),
                                           items: [
-                                            DropdownMenuItem<Customer?>(value: null, child: Text(l10n.get('noCustomer'))),
-                                            ..._customers.map((c) => DropdownMenuItem(value: c, child: Text(c.name))),
+                                            DropdownMenuItem<Customer?>(value: null, child: Text(l10n.get('noCustomer'), overflow: TextOverflow.ellipsis)),
+                                            ..._customers.map((c) => DropdownMenuItem(value: c, child: Text(c.name, overflow: TextOverflow.ellipsis))),
                                           ],
                                           onChanged: (v) => setState(() => _selectedCustomer = v),
                                         ),

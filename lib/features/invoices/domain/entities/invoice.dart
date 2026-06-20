@@ -42,9 +42,10 @@ class Invoice extends Equatable {
   DateTime get createdAt => createdDate ?? DateTime.now();
   double get subtotal => totalAmount;
   double get remainingAmount => finalAmount - paidAmount;
+  bool get isOverpaid => paidAmount > finalAmount;
   bool get isFullyPaid => paidAmount >= finalAmount;
   bool get isPartiallyPaid => paidAmount > 0 && paidAmount < finalAmount;
-  String get paymentStatus => isFullyPaid ? 'paid' : (isPartiallyPaid ? 'partial' : 'unpaid');
+  String get paymentStatus => isOverpaid ? 'overpaid' : isFullyPaid ? 'paid' : (isPartiallyPaid ? 'partial' : 'unpaid');
 
   factory Invoice.fromMap(Map<String, dynamic> map) {
     return Invoice(

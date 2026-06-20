@@ -174,6 +174,9 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
     // Delete sales
     await db.delete('sales', where: 'invoice_id = ?', whereArgs: [id]);
 
+    // Delete associated customer payments
+    await db.delete('customer_payments', where: 'invoice_id = ?', whereArgs: [id]);
+
     // Delete invoice
     final result = await db.delete('invoices', where: 'id = ?', whereArgs: [id]);
     
@@ -302,18 +305,45 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
   Future<int> updateInvoicePaidAmount(int invoiceId, double paidAmount) async {
     final db = await _databaseHelper.database;
     
-    // Get old paid amount for audit
+    // Get current invoice info
     final oldInvoice = await db.query('invoices', where: 'id = ?', whereArgs: [invoiceId]);
-    final oldPaidAmount = oldInvoice.isNotEmpty 
-        ? oldInvoice.first['paid_amount'] 
-        : 0;
-    final invoiceNumber = oldInvoice.isNotEmpty 
-        ? oldInvoice.first['invoice_number'] as String?
-        : null;
+    if (oldInvoice.isEmpty) return 0;
+    
+    final oldPaidAmount = (oldInvoice.first['paid_amount'] as num?)?.toDouble() ?? 0;
+    final customerId = oldInvoice.first['customer_id'] as int?;
+    final invoiceNumber = oldInvoice.first['invoice_number'] as String?;
+    final paymentMethod = oldInvoice.first['payment_method'] as String? ?? 'cash';
+    
+    // Calculate the difference (the new payment being recorded)
+    final paymentDifference = paidAmount - oldPaidAmount;
+    
+    double actualTotal;
+    if (customerId != null) {
+      // Customer invoice: use customer_payments table as source of truth
+      if (paymentDifference > 0) {
+        await db.insert('customer_payments', {
+          'invoice_id': invoiceId,
+          'customer_id': customerId,
+          'amount': paymentDifference,
+          'payment_date': DateTime.now().toIso8601String(),
+          'payment_method': paymentMethod == 'cheque' ? 'cheque' : 'cash',
+          'notes': 'Payment recorded',
+        });
+      }
+      // Recalculate paid_amount from sum of all customer_payments
+      final sumResult = await db.rawQuery(
+        'SELECT COALESCE(SUM(amount), 0) as total FROM customer_payments WHERE invoice_id = ?',
+        [invoiceId],
+      );
+      actualTotal = (sumResult.first['total'] as num?)?.toDouble() ?? 0;
+    } else {
+      // Walk-in sale (no customer): directly update paid_amount
+      actualTotal = paidAmount;
+    }
     
     final result = await db.update(
       'invoices',
-      {'paid_amount': paidAmount},
+      {'paid_amount': actualTotal},
       where: 'id = ?',
       whereArgs: [invoiceId],
     );
@@ -325,7 +355,7 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
         entityId: invoiceId,
         entityName: invoiceNumber,
         oldValue: oldPaidAmount.toString(),
-        newValue: paidAmount.toString(),
+        newValue: actualTotal.toString(),
         details: 'Payment amount updated',
       );
     }

@@ -130,6 +130,8 @@ class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
 
   IconData _getStatusIcon(String status) {
     switch (status) {
+      case 'overpaid':
+        return Icons.add_circle;
       case 'paid':
         return Icons.check_circle;
       case 'partial':
@@ -964,6 +966,8 @@ class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
 
   String _getPaymentStatusLabel(String status) {
     switch (status) {
+      case 'overpaid':
+        return LocalizationService().get('overpaid');
       case 'paid':
         return LocalizationService().get('paid');
       case 'partial':
@@ -977,6 +981,8 @@ class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
 
   Color _getPaymentStatusColor(String status) {
     switch (status) {
+      case 'overpaid':
+        return AppColors.info;
       case 'paid':
         return AppColors.success;
       case 'partial':

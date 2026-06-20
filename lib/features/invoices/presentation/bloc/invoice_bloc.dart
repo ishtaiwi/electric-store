@@ -444,10 +444,17 @@ class InvoiceBloc extends Bloc<InvoiceEvent, InvoiceState> {
     try {
       await _invoiceRepository.updateInvoicePaidAmount(event.invoiceId, event.paidAmount);
       
+      // Re-read invoice from DB to get the actual recalculated paid amount
+      final updatedInvoice = await _invoiceRepository.getInvoiceById(event.invoiceId);
+      
       // Update in persistent list
       final index = _lastKnownInvoices.indexWhere((inv) => inv.id == event.invoiceId);
       if (index != -1) {
-        _lastKnownInvoices[index] = _lastKnownInvoices[index].copyWith(paidAmount: event.paidAmount);
+        if (updatedInvoice != null) {
+          _lastKnownInvoices[index] = updatedInvoice;
+        } else {
+          _lastKnownInvoices[index] = _lastKnownInvoices[index].copyWith(paidAmount: event.paidAmount);
+        }
       }
       
       emit(InvoiceListLoaded(List.from(_lastKnownInvoices)));

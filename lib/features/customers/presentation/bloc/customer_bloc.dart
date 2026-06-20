@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../../../core/services/localization_service.dart';
 import '../../domain/entities/customer.dart';
+import '../../domain/entities/customer_payment.dart';
 import '../../domain/repositories/customer_repository.dart';
 
 // Events
@@ -63,6 +64,43 @@ class CustomerLoadTransactions extends CustomerEvent {
   List<Object?> get props => [customerId];
 }
 
+class CustomerRecordPayment extends CustomerEvent {
+  final CustomerPayment payment;
+
+  const CustomerRecordPayment(this.payment);
+
+  @override
+  List<Object?> get props => [payment];
+}
+
+class CustomerDeletePayment extends CustomerEvent {
+  final int paymentId;
+  final int customerId;
+
+  const CustomerDeletePayment({required this.paymentId, required this.customerId});
+
+  @override
+  List<Object?> get props => [paymentId, customerId];
+}
+
+class CustomerLoadPayments extends CustomerEvent {
+  final int customerId;
+
+  const CustomerLoadPayments(this.customerId);
+
+  @override
+  List<Object?> get props => [customerId];
+}
+
+class CustomerLoadFinancialSummary extends CustomerEvent {
+  final int customerId;
+
+  const CustomerLoadFinancialSummary(this.customerId);
+
+  @override
+  List<Object?> get props => [customerId];
+}
+
 // States
 abstract class CustomerState extends Equatable {
   const CustomerState();
@@ -112,6 +150,25 @@ class CustomerOperationSuccess extends CustomerState {
   List<Object?> get props => [message];
 }
 
+class CustomerPaymentsLoaded extends CustomerState {
+  final List<CustomerPayment> payments;
+
+  const CustomerPaymentsLoaded(this.payments);
+
+  @override
+  List<Object?> get props => [payments];
+}
+
+class CustomerFinancialSummaryLoaded extends CustomerState {
+  final Map<String, dynamic> summary;
+  final List<CustomerPayment> payments;
+
+  const CustomerFinancialSummaryLoaded({required this.summary, required this.payments});
+
+  @override
+  List<Object?> get props => [summary, payments];
+}
+
 // BLoC
 class CustomerBloc extends Bloc<CustomerEvent, CustomerState> {
   final CustomerRepository _customerRepository;
@@ -128,6 +185,10 @@ class CustomerBloc extends Bloc<CustomerEvent, CustomerState> {
     on<CustomerUpdate>(_onUpdate);
     on<CustomerDelete>(_onDelete);
     on<CustomerLoadTransactions>(_onLoadTransactions);
+    on<CustomerRecordPayment>(_onRecordPayment);
+    on<CustomerDeletePayment>(_onDeletePayment);
+    on<CustomerLoadPayments>(_onLoadPayments);
+    on<CustomerLoadFinancialSummary>(_onLoadFinancialSummary);
   }
 
   Future<void> _onLoadAll(
@@ -279,6 +340,69 @@ class CustomerBloc extends Bloc<CustomerEvent, CustomerState> {
       }
       final transactions = await _customerRepository.getCustomerTransactions(event.customerId);
       emit(CustomerTransactionsLoaded(customer: customer, transactions: transactions));
+    } catch (e) {
+      emit(CustomerError(e.toString()));
+    }
+  }
+
+  Future<void> _onRecordPayment(
+    CustomerRecordPayment event,
+    Emitter<CustomerState> emit,
+  ) async {
+    try {
+      await _customerRepository.recordPayment(event.payment);
+      
+      // Refresh customer list to update balances
+      final customers = await _customerRepository.getAllCustomers();
+      _lastKnownCustomers = customers;
+      
+      emit(CustomerLoaded(List.from(_lastKnownCustomers)));
+      emit(CustomerOperationSuccess(LocalizationService().get('paymentRecorded')));
+      emit(CustomerLoaded(List.from(_lastKnownCustomers)));
+    } catch (e) {
+      emit(CustomerError(e.toString()));
+    }
+  }
+
+  Future<void> _onDeletePayment(
+    CustomerDeletePayment event,
+    Emitter<CustomerState> emit,
+  ) async {
+    try {
+      await _customerRepository.deletePayment(event.paymentId);
+      
+      // Refresh customer list to update balances
+      final customers = await _customerRepository.getAllCustomers();
+      _lastKnownCustomers = customers;
+      
+      emit(CustomerLoaded(List.from(_lastKnownCustomers)));
+      emit(CustomerOperationSuccess(LocalizationService().get('paymentDeleted')));
+      emit(CustomerLoaded(List.from(_lastKnownCustomers)));
+    } catch (e) {
+      emit(CustomerError(e.toString()));
+    }
+  }
+
+  Future<void> _onLoadPayments(
+    CustomerLoadPayments event,
+    Emitter<CustomerState> emit,
+  ) async {
+    try {
+      final payments = await _customerRepository.getPaymentsByCustomer(event.customerId);
+      emit(CustomerPaymentsLoaded(payments));
+    } catch (e) {
+      emit(CustomerError(e.toString()));
+    }
+  }
+
+  Future<void> _onLoadFinancialSummary(
+    CustomerLoadFinancialSummary event,
+    Emitter<CustomerState> emit,
+  ) async {
+    try {
+      final summary = await _customerRepository.getCustomerFinancialSummary(event.customerId);
+      final payments = await _customerRepository.getPaymentsByCustomer(event.customerId);
+      emit(CustomerFinancialSummaryLoaded(summary: summary, payments: payments));
     } catch (e) {
       emit(CustomerError(e.toString()));
     }

@@ -129,6 +129,13 @@ class SupplierLoadFinancialSummary extends SupplierEvent {
   List<Object?> get props => [supplierId];
 }
 
+class SupplierLoadPayments extends SupplierEvent {
+  final int supplierId;
+  const SupplierLoadPayments(this.supplierId);
+  @override
+  List<Object?> get props => [supplierId];
+}
+
 class SupplierLoadGlobalOutstanding extends SupplierEvent {}
 
 class SupplierLoadAllOutstanding extends SupplierEvent {}
@@ -231,6 +238,7 @@ class SupplierBloc extends Bloc<SupplierEvent, SupplierState> {
     on<SupplierRecordPayment>(_onRecordPayment);
     on<SupplierDeletePayment>(_onDeletePayment);
     on<SupplierLoadFinancialSummary>(_onLoadFinancialSummary);
+    on<SupplierLoadPayments>(_onLoadPayments);
     on<SupplierLoadGlobalOutstanding>(_onLoadGlobalOutstanding);
     on<SupplierLoadAllOutstanding>(_onLoadAllOutstanding);
   }
@@ -515,16 +523,19 @@ class SupplierBloc extends Bloc<SupplierEvent, SupplierState> {
     try {
       await _supplierRepository.recordPayment(event.payment);
       final invoices = await _supplierRepository.getInvoicesBySupplier(event.supplierId);
+      final payments = await _supplierRepository.getPaymentsBySupplier(event.supplierId);
       final summary = await _supplierRepository.getSupplierFinancialSummary(event.supplierId);
       final current = _getCurrentLoaded();
       emit(current.copyWithFinancial(
         invoices: invoices,
+        payments: payments,
         financialSummary: summary,
         selectedSupplierId: event.supplierId,
       ));
       emit(SupplierOperationSuccess(LocalizationService().get('supplierPaymentRecorded')));
       emit(current.copyWithFinancial(
         invoices: invoices,
+        payments: payments,
         financialSummary: summary,
         selectedSupplierId: event.supplierId,
       ));
@@ -537,17 +548,33 @@ class SupplierBloc extends Bloc<SupplierEvent, SupplierState> {
     try {
       await _supplierRepository.deletePayment(event.paymentId);
       final invoices = await _supplierRepository.getInvoicesBySupplier(event.supplierId);
+      final payments = await _supplierRepository.getPaymentsBySupplier(event.supplierId);
       final summary = await _supplierRepository.getSupplierFinancialSummary(event.supplierId);
       final current = _getCurrentLoaded();
       emit(current.copyWithFinancial(
         invoices: invoices,
+        payments: payments,
         financialSummary: summary,
         selectedSupplierId: event.supplierId,
       ));
       emit(SupplierOperationSuccess(LocalizationService().get('supplierPaymentDeleted')));
       emit(current.copyWithFinancial(
         invoices: invoices,
+        payments: payments,
         financialSummary: summary,
+        selectedSupplierId: event.supplierId,
+      ));
+    } catch (e) {
+      emit(SupplierError(e.toString()));
+    }
+  }
+
+  Future<void> _onLoadPayments(SupplierLoadPayments event, Emitter<SupplierState> emit) async {
+    try {
+      final payments = await _supplierRepository.getPaymentsBySupplier(event.supplierId);
+      final current = _getCurrentLoaded();
+      emit(current.copyWithFinancial(
+        payments: payments,
         selectedSupplierId: event.supplierId,
       ));
     } catch (e) {

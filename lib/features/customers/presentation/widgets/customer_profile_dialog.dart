@@ -12,6 +12,7 @@ import '../../../invoices/presentation/bloc/invoice_bloc.dart';
 import '../../../settings/domain/repositories/settings_repository.dart';
 import '../../domain/entities/customer.dart';
 import '../bloc/customer_bloc.dart';
+import 'customer_financial_dialog.dart';
 import 'customer_form_dialog.dart';
 
 class CustomerProfileDialog extends StatefulWidget {
@@ -256,9 +257,14 @@ class _CustomerProfileDialogState extends State<CustomerProfileDialog>
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      child: Container(
-        width: 700,
-        height: 600,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 750,
+          maxHeight: MediaQuery.of(context).size.height * 0.88,
+        ),
+        child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
@@ -363,6 +369,24 @@ class _CustomerProfileDialogState extends State<CustomerProfileDialog>
                   label: Text(LocalizationService().get('edit')),
                 ),
                 const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (dialogContext) => BlocProvider.value(
+                        value: context.read<CustomerBloc>(),
+                        child: CustomerFinancialDialog(customer: widget.customer),
+                      ),
+                    ).then((_) => _loadInvoices());
+                  },
+                  icon: const Icon(Icons.account_balance_wallet, size: 18),
+                  label: Text(LocalizationService().get('customerFinancial')),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.success,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: _exportCustomerStatementPdf,
                   icon: const Icon(Icons.picture_as_pdf),
@@ -401,6 +425,7 @@ class _CustomerProfileDialogState extends State<CustomerProfileDialog>
               ),
             ),
           ],
+        ),
         ),
       ),
     );
@@ -601,6 +626,8 @@ class _CustomerProfileDialogState extends State<CustomerProfileDialog>
   
   String _getPaymentStatusLabel(String status) {
     switch (status) {
+      case 'overpaid':
+        return LocalizationService().get('overpaid');
       case 'paid':
         return LocalizationService().get('paid');
       case 'partial':
@@ -614,6 +641,8 @@ class _CustomerProfileDialogState extends State<CustomerProfileDialog>
   
   Color _getPaymentStatusColor(String status) {
     switch (status) {
+      case 'overpaid':
+        return AppColors.info;
       case 'paid':
         return AppColors.success;
       case 'partial':
@@ -673,139 +702,191 @@ class _InvoiceDetailDialogState extends State<_InvoiceDetailDialog> {
     final remaining = widget.invoice.remainingAmount;
     final isPaid = remaining <= 0;
 
-    return AlertDialog(
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Text('Invoice #${widget.invoice.invoiceNumber}'),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _getPaymentStatusColor(widget.invoice.paymentStatus).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  _getPaymentStatusLabel(widget.invoice.paymentStatus),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: _getPaymentStatusColor(widget.invoice.paymentStatus),
+    final loc = LocalizationService();
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 60, vertical: 30),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 540,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.receipt_long, color: Colors.white, size: 22),
                   ),
-                ),
-              ),
-            ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete, color: AppColors.error),
-            onPressed: () {
-              Navigator.pop(context);
-              widget.onDelete();
-            },
-            tooltip: LocalizationService().get('delete'),
-          ),
-        ],
-      ),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 450),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildRow(LocalizationService().get('date'), dateFormat.format(widget.invoice.createdAt)),
-              _buildRow(LocalizationService().get('customerName'), widget.invoice.customerName ?? 'Walk-in'),
-              _buildRow(LocalizationService().get('payment'), widget.invoice.paymentMethod.toUpperCase()),
-              const Divider(),
-              _buildRow(LocalizationService().get('subtotal'), '₪${widget.invoice.totalAmount.toStringAsFixed(2)}'),
-              if (widget.invoice.discountAmount > 0)
-                _buildRow(LocalizationService().get('discount'), '-₪${widget.invoice.discountAmount.toStringAsFixed(2)}'),
-              _buildRow(
-                LocalizationService().get('total'),
-                '₪${widget.invoice.finalAmount.toStringAsFixed(2)}',
-                isBold: true,
-              ),
-              const Divider(),
-              // Payment breakdown
-              _buildRow(
-                LocalizationService().get('paidAmount'),
-                '₪${widget.invoice.paidAmount.toStringAsFixed(2)}',
-                color: AppColors.success,
-              ),
-              _buildRow(
-                LocalizationService().get('remainingAmount'),
-                '₪${remaining.toStringAsFixed(2)}',
-                color: remaining > 0 ? AppColors.error : AppColors.success,
-                isBold: true,
-              ),
-              if (!isPaid) ...[
-                const SizedBox(height: 16),
-                const Divider(),
-                const SizedBox(height: 8),
-                Text(
-                  LocalizationService().get('recordPayment'),
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _paymentController,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: InputDecoration(
-                          labelText: LocalizationService().get('paymentAmount'),
-                          hintText: LocalizationService().get('enterPaymentAmount'),
-                          prefixText: '₪ ',
-                          border: const OutlineInputBorder(),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Text(
+                          'Invoice #${widget.invoice.invoiceNumber}',
+                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                         ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return LocalizationService().get('required');
-                          }
-                          final amount = double.tryParse(value);
-                          if (amount == null || amount <= 0) {
-                            return LocalizationService().get('invalidNumber');
-                          }
-                          if (amount > remaining) {
-                            return '${LocalizationService().get('max')}: ₪${remaining.toStringAsFixed(2)}';
-                          }
-                          return null;
-                        },
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _getPaymentStatusLabel(widget.invoice.paymentStatus),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.white70),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      widget.onDelete();
+                    },
+                    tooltip: loc.get('delete'),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            // Body
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildRow(loc.get('date'), dateFormat.format(widget.invoice.createdAt)),
+                      _buildRow(loc.get('customerName'), widget.invoice.customerName ?? 'Walk-in'),
+                      _buildRow(loc.get('payment'), widget.invoice.paymentMethod.toUpperCase()),
+                      const Divider(),
+                      _buildRow(loc.get('subtotal'), '₪${widget.invoice.totalAmount.toStringAsFixed(2)}'),
+                      if (widget.invoice.discountAmount > 0)
+                        _buildRow(loc.get('discount'), '-₪${widget.invoice.discountAmount.toStringAsFixed(2)}'),
+                      _buildRow(
+                        loc.get('total'),
+                        '₪${widget.invoice.finalAmount.toStringAsFixed(2)}',
+                        isBold: true,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: _recordPayment,
-                      child: Text(LocalizationService().get('record')),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _payFull,
-                    icon: const Icon(Icons.check_circle),
-                    label: Text('${LocalizationService().get('payFull')} (₪${remaining.toStringAsFixed(2)})'),
+                      const Divider(),
+                      // Payment breakdown
+                      _buildRow(
+                        loc.get('paidAmount'),
+                        '₪${widget.invoice.paidAmount.toStringAsFixed(2)}',
+                        color: AppColors.success,
+                      ),
+                      _buildRow(
+                        loc.get('remainingAmount'),
+                        '₪${remaining.toStringAsFixed(2)}',
+                        color: remaining > 0 ? AppColors.error : AppColors.success,
+                        isBold: true,
+                      ),
+                      if (!isPaid) ...[
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const SizedBox(height: 8),
+                        Text(
+                          loc.get('recordPayment'),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: _paymentController,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                decoration: InputDecoration(
+                                  labelText: loc.get('paymentAmount'),
+                                  hintText: loc.get('enterPaymentAmount'),
+                                  prefixText: '₪ ',
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return loc.get('required');
+                                  }
+                                  final amount = double.tryParse(value);
+                                  if (amount == null || amount <= 0) {
+                                    return loc.get('invalidNumber');
+                                  }
+                                  if (amount > remaining) {
+                                    return '${loc.get('max')}: ₪${remaining.toStringAsFixed(2)}';
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: _recordPayment,
+                              child: Text(loc.get('record')),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _payFull,
+                            icon: const Icon(Icons.check_circle),
+                            label: Text('${loc.get('payFull')} (₪${remaining.toStringAsFixed(2)})'),
+                          ),
+                        ),
+                      ],
+                      const Divider(),
+                      _buildRow(loc.get('profit'), '₪${widget.invoice.totalProfit.toStringAsFixed(2)}'),
+                    ],
                   ),
                 ),
-              ],
-              const Divider(),
-              _buildRow(LocalizationService().get('profit'), '₪${widget.invoice.totalProfit.toStringAsFixed(2)}'),
-            ],
-          ),
+              ),
+            ),
+            // Actions
+            Container(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(loc.get('close')),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(LocalizationService().get('close')),
-        ),
-      ],
     );
   }
 
@@ -831,6 +912,8 @@ class _InvoiceDetailDialogState extends State<_InvoiceDetailDialog> {
 
   String _getPaymentStatusLabel(String status) {
     switch (status) {
+      case 'overpaid':
+        return LocalizationService().get('overpaid');
       case 'paid':
         return LocalizationService().get('paid');
       case 'partial':
@@ -839,19 +922,6 @@ class _InvoiceDetailDialogState extends State<_InvoiceDetailDialog> {
         return LocalizationService().get('unpaid');
       default:
         return status;
-    }
-  }
-
-  Color _getPaymentStatusColor(String status) {
-    switch (status) {
-      case 'paid':
-        return AppColors.success;
-      case 'partial':
-        return AppColors.warning;
-      case 'unpaid':
-        return AppColors.error;
-      default:
-        return AppColors.textSecondary;
     }
   }
 }

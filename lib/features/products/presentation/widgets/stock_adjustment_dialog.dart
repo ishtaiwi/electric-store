@@ -47,168 +47,233 @@ class _StockAdjustmentDialogState extends State<StockAdjustmentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(LocalizationService().get('stockAdjustment')),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Product info
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.inventory_2, color: AppColors.primary),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.product.name,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            'Current Stock: ${widget.product.quantity}',
-                            style: const TextStyle(color: AppColors.textSecondary),
-                          ),
-                        ],
-                      ),
+    final loc = LocalizationService();
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 80, vertical: 40),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 520,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Adjustment type
-              Text(
-                LocalizationService().get('adjustmentType'),
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: [
-                  ButtonSegment(
-                    value: 'stock_in',
-                    label: Text(LocalizationService().get('stockIn')),
-                    icon: const Icon(Icons.add),
+                    child: const Icon(Icons.tune, color: Colors.white, size: 22),
                   ),
-                  ButtonSegment(
-                    value: 'stock_out',
-                    label: Text(LocalizationService().get('stockOut')),
-                    icon: const Icon(Icons.remove),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      loc.get('stockAdjustment'),
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
                   ),
-                  ButtonSegment(
-                    value: 'return',
-                    label: Text(LocalizationService().get('return')),
-                    icon: const Icon(Icons.undo),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
                   ),
                 ],
-                selected: {_adjustmentType},
-                onSelectionChanged: (Set<String> selection) {
-                  setState(() {
-                    _adjustmentType = selection.first;
-                  });
-                },
               ),
-              const SizedBox(height: 24),
-
-              // Quantity
-              TextFormField(
-                controller: _quantityController,
-                decoration: InputDecoration(
-                  labelText: LocalizationService().get('quantity'),
-                  prefixIcon: Icon(
-                    _adjustmentType == 'stock_in' ? Icons.add : Icons.remove,
-                  ),
-                ),
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                autofocus: true,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return LocalizationService().get('quantityRequired');
-                  }
-                  final qty = int.tryParse(value) ?? 0;
-                  if (qty <= 0) {
-                    return LocalizationService().get('quantityGreaterThanZero');
-                  }
-                  if (_adjustmentType == 'stock_out' && qty > widget.product.quantity) {
-                    return LocalizationService().get('cannotRemoveMoreThanStock');
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Reason
-              TextFormField(
-                controller: _reasonController,
-                decoration: InputDecoration(
-                  labelText: LocalizationService().get('reasonOptional'),
-                  prefixIcon: const Icon(Icons.note),
-                ),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 16),
-
-              // Preview
-              if (_quantityController.text.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: _adjustmentType == 'stock_in'
-                        ? AppColors.success.withOpacity(0.1)
-                        : AppColors.warning.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+            ),
+            // Body
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
-                        _adjustmentType == 'stock_in'
-                            ? Icons.arrow_upward
-                            : Icons.arrow_downward,
-                        color: _adjustmentType == 'stock_in'
-                            ? AppColors.success
-                            : AppColors.warning,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'New Stock: ${_calculateNewStock()}',
-                        style: TextStyle(
-                          color: _adjustmentType == 'stock_in'
-                              ? AppColors.success
-                              : AppColors.warning,
-                          fontWeight: FontWeight.w500,
+                      // Product info
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.inventory_2, color: AppColors.primary),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.product.name,
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  Text(
+                                    'Current Stock: ${widget.product.quantity}',
+                                    style: const TextStyle(color: AppColors.textSecondary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+                      const SizedBox(height: 24),
+
+                      // Adjustment type
+                      Text(
+                        loc.get('adjustmentType'),
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 8),
+                      SegmentedButton<String>(
+                        segments: [
+                          ButtonSegment(
+                            value: 'stock_in',
+                            label: Text(loc.get('stockIn')),
+                            icon: const Icon(Icons.add),
+                          ),
+                          ButtonSegment(
+                            value: 'stock_out',
+                            label: Text(loc.get('stockOut')),
+                            icon: const Icon(Icons.remove),
+                          ),
+                          ButtonSegment(
+                            value: 'return',
+                            label: Text(loc.get('return')),
+                            icon: const Icon(Icons.undo),
+                          ),
+                        ],
+                        selected: {_adjustmentType},
+                        onSelectionChanged: (Set<String> selection) {
+                          setState(() {
+                            _adjustmentType = selection.first;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Quantity
+                      TextFormField(
+                        controller: _quantityController,
+                        decoration: InputDecoration(
+                          labelText: loc.get('quantity'),
+                          prefixIcon: Icon(
+                            _adjustmentType == 'stock_in' ? Icons.add : Icons.remove,
+                          ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        autofocus: true,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return loc.get('quantityRequired');
+                          }
+                          final qty = int.tryParse(value) ?? 0;
+                          if (qty <= 0) {
+                            return loc.get('quantityGreaterThanZero');
+                          }
+                          if (_adjustmentType == 'stock_out' && qty > widget.product.quantity) {
+                            return loc.get('cannotRemoveMoreThanStock');
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Reason
+                      TextFormField(
+                        controller: _reasonController,
+                        decoration: InputDecoration(
+                          labelText: loc.get('reasonOptional'),
+                          prefixIcon: const Icon(Icons.note),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Preview
+                      if (_quantityController.text.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: _adjustmentType == 'stock_in'
+                                ? AppColors.success.withOpacity(0.1)
+                                : AppColors.warning.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                _adjustmentType == 'stock_in'
+                                    ? Icons.arrow_upward
+                                    : Icons.arrow_downward,
+                                color: _adjustmentType == 'stock_in'
+                                    ? AppColors.success
+                                    : AppColors.warning,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'New Stock: ${_calculateNewStock()}',
+                                style: TextStyle(
+                                  color: _adjustmentType == 'stock_in'
+                                      ? AppColors.success
+                                      : AppColors.warning,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),
-            ],
-          ),
+              ),
+            ),
+            // Actions
+            Container(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(loc.get('cancel')),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: _save,
+                    icon: const Icon(Icons.save, size: 18),
+                    label: Text(loc.get('save')),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(LocalizationService().get('cancel')),
-        ),
-        ElevatedButton(
-          onPressed: _save,
-          child: Text(LocalizationService().get('save')),
-        ),
-      ],
     );
   }
 

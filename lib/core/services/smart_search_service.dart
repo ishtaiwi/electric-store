@@ -131,8 +131,10 @@ class SmartSearchService {
 
     final db = await _db.database;
     final normalizedQuery = _normalizeQuery(query);
-    final tokens = _tokenize(normalizedQuery);
     final originalTokens = _tokenize(query.toLowerCase());
+    final normalizedTokens = _tokenize(normalizedQuery);
+    // Merge both token sets to search with both forms
+    final allTokens = {...originalTokens, ...normalizedTokens}.toList();
     
     // Extract special patterns
     final wattage = _extractWattage(query);
@@ -146,11 +148,14 @@ class SmartSearchService {
     // Strategy 0: Exact barcode match (highest priority)
     results.addAll(await _searchByBarcode(db, query.trim(), seenIds));
     
-    // Strategy 1: Exact token matches (original tokens first)
-    results.addAll(await _searchByTokens(db, tokens, seenIds));
+    // Strategy 0b: Direct LIKE with original query (most reliable for exact substring)
+    results.addAll(await _searchDirectLike(db, query.trim(), seenIds));
+    
+    // Strategy 1: Token matches with BOTH original and normalized tokens
+    results.addAll(await _searchByTokens(db, allTokens, seenIds));
     
     // Strategy 1b: Synonym-expanded token search
-    results.addAll(await _searchBySynonymTokens(db, tokens, seenIds));
+    results.addAll(await _searchBySynonymTokens(db, allTokens, seenIds));
     
     // Strategy 2: Fuzzy matching with original tokens
     results.addAll(await _searchFuzzy(db, originalTokens, seenIds));
@@ -167,7 +172,28 @@ class SmartSearchService {
     }
 
     // Rank and filter results - use original tokens for proper boosting
-    return _rankResults(results, tokens, wattage, size, color);
+    return _rankResults(results, originalTokens, wattage, size, color);
+  }
+
+  /// Strategy 0b: Direct LIKE search with the original query (no normalization)
+  /// This is the most reliable strategy for finding all products containing the search term.
+  Future<List<Map<String, dynamic>>> _searchDirectLike(
+    dynamic db,
+    String query,
+    Set<int> seenIds,
+  ) async {
+    if (query.isEmpty) return [];
+    
+    try {
+      // Search with the raw query as-is against name, barcode, note, supplier
+      final results = await db.rawQuery(
+        'SELECT * FROM products WHERE name LIKE ? OR barcode LIKE ? OR note LIKE ? OR supplier LIKE ? ORDER BY name ASC LIMIT 200',
+        ['%$query%', '%$query%', '%$query%', '%$query%'],
+      );
+      return _filterSeen(results, seenIds);
+    } catch (e) {
+      return [];
+    }
   }
 
   /// Strategy 0: Exact barcode match
@@ -205,12 +231,18 @@ class SmartSearchService {
   ) async {
     if (tokens.isEmpty) return [];
     
-    final conditions = tokens.map((_) => '(name LIKE ? OR barcode LIKE ?)').join(' AND ');
-    final args = tokens.expand((t) => ['%$t%', '%$t%']).toList();
+    // Deduplicate tokens
+    final uniqueTokens = tokens.toSet().toList();
+    
+    // Use OR between tokens from different normalization forms,
+    // but require ALL conceptual tokens to match.
+    // Group tokens by their position: original and normalized are alternatives.
+    final conditions = uniqueTokens.map((_) => 'name LIKE ?').join(' OR ');
+    final args = uniqueTokens.map((t) => '%$t%').toList();
     
     try {
       final results = await db.rawQuery(
-        'SELECT * FROM products WHERE $conditions LIMIT 30',
+        'SELECT * FROM products WHERE $conditions LIMIT 200',
         args,
       );
       
@@ -232,7 +264,7 @@ class SmartSearchService {
     final allConditions = <String>[];
     final allArgs = <String>[];
     
-    for (final token in tokens) {
+    for (final token in tokens.toSet()) {
       final synonyms = _getSynonymExpansions(token);
       if (synonyms.length > 1) {
         // Only use synonym expansion if there are actual synonyms
@@ -246,7 +278,7 @@ class SmartSearchService {
     
     try {
       final results = await db.rawQuery(
-        'SELECT * FROM products WHERE ${allConditions.join(' AND ')} LIMIT 30',
+        'SELECT * FROM products WHERE ${allConditions.join(' AND ')} LIMIT 100',
         allArgs,
       );
       return _filterSeen(results, seenIds);
@@ -270,17 +302,23 @@ class SmartSearchService {
       if (seenIds.contains(product['id'])) continue;
       
       final name = (product['name'] as String).toLowerCase();
+      // Also normalize the product name for comparison
+      var normalizedName = name;
+      _arabicNormalization.forEach((from, to) {
+        normalizedName = normalizedName.replaceAll(from, to);
+      });
+      
       var matchScore = 0;
       
       for (final token in tokens) {
-        // Check substring match
-        if (name.contains(token)) {
+        // Check substring match on both original and normalized name
+        if (name.contains(token) || normalizedName.contains(token)) {
           matchScore += 30;
           continue;
         }
         
         // Check fuzzy match (Levenshtein-like)
-        final nameWords = name.split(RegExp(r'[\s\-_]+'));
+        final nameWords = name.split(RegExp(r'[\s\-_،,./]+'));
         for (final word in nameWords) {
           if (_isFuzzyMatch(token, word)) {
             matchScore += 20;
@@ -310,7 +348,7 @@ class SmartSearchService {
       (b['fuzzy_score'] as int).compareTo(a['fuzzy_score'] as int)
     );
     
-    return _filterSeen(fuzzyResults.take(20).toList(), seenIds);
+    return _filterSeen(fuzzyResults.take(50).toList(), seenIds);
   }
 
   /// Check if two strings are fuzzy matches
@@ -397,7 +435,7 @@ class SmartSearchService {
     
     try {
       final results = await db.rawQuery(
-        'SELECT * FROM products WHERE $conditions LIMIT 20',
+        'SELECT * FROM products WHERE $conditions LIMIT 100',
         args,
       );
       return _filterSeen(results, seenIds);
@@ -594,16 +632,21 @@ class SmartSearchService {
     final scored = results.map((r) {
       var score = (r['fuzzy_score'] as int?) ?? 50;
       final name = (r['name'] as String).toLowerCase();
+      // Normalize product name too for matching
+      var normalizedName = name;
+      _arabicNormalization.forEach((from, to) {
+        normalizedName = normalizedName.replaceAll(from, to);
+      });
       
       // Boost for exact token matches (original query terms)
       for (final token in tokens) {
-        if (name.contains(token)) {
+        if (name.contains(token) || normalizedName.contains(token)) {
           score += 30; // Strong boost for exact match on search term
-          if (name.startsWith(token)) score += 15;
+          if (name.startsWith(token) || normalizedName.startsWith(token)) score += 15;
         } else {
           // Check if match is via synonym - lower boost
           final synonyms = _getSynonymExpansions(token);
-          final isSynonymMatch = synonyms.any((syn) => syn != token && name.contains(syn));
+          final isSynonymMatch = synonyms.any((syn) => syn != token && (name.contains(syn) || normalizedName.contains(syn)));
           if (isSynonymMatch) {
             score += 10; // Lower boost for synonym-only match
           }
@@ -638,12 +681,12 @@ class SmartSearchService {
     
     scored.sort((a, b) => (b['score'] as int).compareTo(a['score'] as int));
     
-    // Filter out low-relevance results to avoid showing irrelevant products
-    // Minimum threshold: at least one direct token match (score ~65) or strong fuzzy match
-    final minScore = tokens.isNotEmpty ? 40 : 30;
+    // Don't aggressively filter - return all results sorted by relevance.
+    // Only remove very low scores (likely noise from n-gram/fuzzy)
+    const minScore = 30;
     final filtered = scored.where((r) => (r['score'] as int) >= minScore).toList();
     
-    return filtered.isNotEmpty ? filtered : scored.take(5).toList();
+    return filtered.isNotEmpty ? filtered : scored.take(10).toList();
   }
 
   /// Get search suggestions with fuzzy matching

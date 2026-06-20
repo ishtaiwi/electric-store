@@ -27,6 +27,7 @@ abstract class SupplierRepository {
 
   // Supplier Payment operations
   Future<List<SupplierPayment>> getPaymentsByInvoice(int invoiceId);
+  Future<List<SupplierPayment>> getPaymentsBySupplier(int supplierId);
   Future<int> recordPayment(SupplierPayment payment);
   Future<int> deletePayment(int paymentId);
 
