@@ -69,7 +69,7 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 12,
+      version: 13,
       onCreate: dbExists ? null : _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: _onConfigure,
@@ -255,6 +255,22 @@ class DatabaseHelper {
         WHERE i.paid_amount > 0 AND i.customer_id IS NOT NULL
       ''');
     }
+    // Migration: v12 -> v13: Add customer_name column to invoices
+    if (oldVersion < 13) {
+      final tableInfo = await db.rawQuery('PRAGMA table_info(invoices)');
+      final hasColumn = tableInfo.any((col) => col['name'] == 'customer_name');
+      if (!hasColumn) {
+        await db.execute("ALTER TABLE invoices ADD COLUMN customer_name TEXT");
+        // Populate customer_name from customers table where possible
+        await db.execute('''
+          UPDATE invoices
+          SET customer_name = (
+            SELECT name FROM customers c WHERE c.id = invoices.customer_id
+          )
+          WHERE customer_id IS NOT NULL
+        ''');
+      }
+    }
   }
 
   /// Creates all performance-critical indexes.
@@ -437,6 +453,7 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         invoice_number TEXT UNIQUE NOT NULL,
         customer_id INTEGER REFERENCES customers(id),
+        customer_name TEXT,
         total_amount REAL NOT NULL DEFAULT 0,
         discount_amount REAL DEFAULT 0,
         final_amount REAL NOT NULL DEFAULT 0,

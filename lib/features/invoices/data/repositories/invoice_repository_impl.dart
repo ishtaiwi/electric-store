@@ -200,6 +200,8 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
     required List<SaleItem> updatedItems,
     double discountAmount = 0,
     String? paymentMethod,
+    String? customerName,
+    int? customerId,
     double? paidAmount,
   }) async {
     final db = await _databaseHelper.database;
@@ -224,7 +226,9 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
     final newFinalAmount = newTotalAmount - discountAmount;
     newTotalProfit -= discountAmount;
     final newPaymentMethod = paymentMethod ?? oldInvoice.paymentMethod;
+    final newCustomerName = customerName ?? oldInvoice.customerName;
     final newPaidAmount = paidAmount ?? oldInvoice.paidAmount;
+    final newCustomerId = customerId ?? oldInvoice.customerId;
 
     await db.transaction((txn) async {
       // 1. Restore inventory for ALL old items (return quantities to stock)
@@ -275,14 +279,23 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
       }
 
       // 4. Update the invoice record
-      await txn.update('invoices', {
+      final updateMap = {
         'total_amount': newTotalAmount,
         'discount_amount': discountAmount,
         'final_amount': newFinalAmount,
         'paid_amount': newPaidAmount,
         'total_profit': newTotalProfit,
         'payment_method': newPaymentMethod,
-      }, where: 'id = ?', whereArgs: [invoiceId]);
+      };
+      // Only include customer_name if explicitly provided (to avoid overwriting NULLs unintentionally)
+      if (customerName != null) {
+        updateMap['customer_name'] = customerName;
+      }
+      if (customerId != null) {
+        updateMap['customer_id'] = customerId;
+      }
+
+      await txn.update('invoices', updateMap, where: 'id = ?', whereArgs: [invoiceId]);
     });
 
     _auditLogger.log(
@@ -290,8 +303,8 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
       entityType: 'invoice',
       entityId: invoiceId,
       entityName: oldInvoice.invoiceNumber,
-      oldValue: 'Items: ${oldItems.length}, Total: ${oldInvoice.finalAmount}',
-      newValue: 'Items: ${updatedItems.length}, Total: $newFinalAmount',
+      oldValue: 'Items: ${oldItems.length}, Total: ${oldInvoice.finalAmount}, Customer: ${oldInvoice.customerName}',
+      newValue: 'Items: ${updatedItems.length}, Total: $newFinalAmount, Customer: $newCustomerName',
       details: 'Invoice items updated with inventory adjustment',
     );
 

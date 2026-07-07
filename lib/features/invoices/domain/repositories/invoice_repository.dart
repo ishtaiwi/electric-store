@@ -17,6 +17,8 @@ abstract class InvoiceRepository {
     required List<SaleItem> updatedItems,
     double discountAmount = 0,
     String? paymentMethod,
+    String? customerName,
+    int? customerId,
     double? paidAmount,
   });
   

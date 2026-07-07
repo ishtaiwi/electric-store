@@ -109,6 +109,8 @@ class InvoiceFullUpdate extends InvoiceEvent {
   final int invoiceId;
   final List<SaleItem> updatedItems;
   final double discountAmount;
+  final String? customerName;
+  final int? customerId;
   final String? paymentMethod;
   final double? paidAmount;
 
@@ -116,12 +118,14 @@ class InvoiceFullUpdate extends InvoiceEvent {
     required this.invoiceId,
     required this.updatedItems,
     this.discountAmount = 0,
+    this.customerName,
+    this.customerId,
     this.paymentMethod,
     this.paidAmount,
   });
 
   @override
-  List<Object?> get props => [invoiceId, updatedItems, discountAmount, paymentMethod, paidAmount];
+  List<Object?> get props => [invoiceId, updatedItems, discountAmount, customerName, customerId, paymentMethod, paidAmount];
 }
 
 /// Fast update: adds invoice to list without DB reload
@@ -497,6 +501,8 @@ class InvoiceBloc extends Bloc<InvoiceEvent, InvoiceState> {
         invoiceId: event.invoiceId,
         updatedItems: event.updatedItems,
         discountAmount: event.discountAmount,
+        customerName: event.customerName,
+        customerId: event.customerId,
         paymentMethod: event.paymentMethod,
         paidAmount: event.paidAmount,
       );

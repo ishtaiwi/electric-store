@@ -7,6 +7,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../customers/presentation/bloc/customer_bloc.dart';
 import '../../../products/domain/entities/product.dart';
 import '../../../products/domain/repositories/product_repository.dart';
+import '../../../customers/domain/entities/customer.dart';
+import '../../../customers/domain/repositories/customer_repository.dart';
 import '../../../products/presentation/bloc/product_bloc.dart';
 import '../../domain/entities/invoice.dart';
 import '../../domain/entities/sale_item.dart';
@@ -31,6 +33,8 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
   late TextEditingController _discountController;
   late TextEditingController _searchController;
   late String _paymentMethod;
+  int? _selectedCustomerId;
+  String? _selectedCustomerName;
   List<Product> _searchResults = [];
   bool _isSearching = false;
 
@@ -46,6 +50,8 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
           : '',
     );
     _searchController = TextEditingController();
+    _selectedCustomerId = widget.invoice.customerId;
+    _selectedCustomerName = widget.invoice.customerName;
     _paymentMethod = widget.invoice.paymentMethod;
   }
 
@@ -284,6 +290,91 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
     );
   }
 
+  Future<void> _openCustomerPicker() async {
+    final repo = di.sl<CustomerRepository>();
+    String query = '';
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            Future<List<Customer>> _load() {
+              if (query.trim().isEmpty) return repo.getAllCustomers();
+              return repo.searchCustomers(query.trim());
+            }
+
+            return Dialog(
+              child: SizedBox(
+                width: 520,
+                height: 520,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: TextField(
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: LocalizationService().get('searchCustomers'),
+                          prefixIcon: const Icon(Icons.search),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onChanged: (v) => setState(() => query = v),
+                      ),
+                    ),
+                    Expanded(
+                      child: FutureBuilder<List<Customer>>(
+                        future: _load(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(child: CircularProgressIndicator());
+                          }
+                          final items = snapshot.data ?? [];
+                          if (items.isEmpty) {
+                            return Center(child: Text(LocalizationService().get('noCustomers')));
+                          }
+                          return ListView.builder(
+                            itemCount: items.length,
+                            itemBuilder: (context, index) {
+                              final c = items[index];
+                              return ListTile(
+                                title: Text(c.name),
+                                subtitle: c.phone != null ? Text(c.phone!) : null,
+                                onTap: () {
+                                  setState(() {
+                                    _selectedCustomerId = c.id;
+                                    _selectedCustomerName = c.name;
+                                  });
+                                  Navigator.pop(dialogContext);
+                                },
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Row(
+                        children: [
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: Text(LocalizationService().get('close')),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _addCustomProduct(
     TextEditingController nameCtrl,
     TextEditingController priceCtrl,
@@ -341,6 +432,8 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
       invoiceId: widget.invoice.id!,
       updatedItems: updatedSaleItems,
       discountAmount: _discount,
+      customerName: _selectedCustomerName,
+      customerId: _selectedCustomerId,
       paymentMethod: _paymentMethod,
       paidAmount: widget.invoice.paidAmount,
     ));
@@ -445,6 +538,35 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // ─── Customer (select from existing customers) ───
+                    InkWell(
+                      onTap: _openCustomerPicker,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(10),
+                          color: AppColors.surface,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.person_outline, size: 20, color: Colors.grey),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _selectedCustomerName ?? LocalizationService().get('selectCustomer'),
+                                style: TextStyle(fontSize: 14, color: _selectedCustomerName == null ? AppColors.textHint : AppColors.textPrimary),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
                     // ─── Product Search ───
                     Row(
                       children: [
