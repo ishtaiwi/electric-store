@@ -573,14 +573,26 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
 
     emit(SalesLoading());
     try {
-      final invoice = await _salesRepository.createSale(
-        items: currentState.cart,
-        customerId: customerId,
-        discountAmount: discount,
-        paymentMethod: paymentMethod,
-        paidAmount: event.paidAmount,
-        userId: event.userId,
-      );
+      final Invoice invoice;
+
+      if (customerId != null) {
+        invoice = await _salesRepository.addToCustomerAccount(
+          items: currentState.cart,
+          customerId: customerId,
+          discountAmount: discount,
+          paidAmount: event.paidAmount,
+          paymentMethod: paymentMethod,
+          userId: event.userId,
+        );
+      } else {
+        invoice = await _salesRepository.createSale(
+          items: currentState.cart,
+          discountAmount: discount,
+          paymentMethod: paymentMethod,
+          paidAmount: event.paidAmount,
+          userId: event.userId,
+        );
+      }
       
       emit(SalesCheckoutSuccess(invoice));
       

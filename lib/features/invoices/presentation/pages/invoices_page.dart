@@ -112,6 +112,8 @@ class _InvoicesPageState extends State<InvoicesPage> {
         return LocalizationService().get('card');
       case 'credit':
         return LocalizationService().get('credit');
+      case 'account':
+        return LocalizationService().get('accountStatement');
       default:
         return method;
     }
@@ -125,6 +127,8 @@ class _InvoicesPageState extends State<InvoicesPage> {
         return AppColors.info;
       case 'credit':
         return AppColors.warning;
+      case 'account':
+        return AppColors.primary;
       default:
         return AppColors.textSecondary;
     }
@@ -220,8 +224,9 @@ class _InvoicesPageState extends State<InvoicesPage> {
           _invoices = state.invoices;
         }
         
-        // Apply filters to cached invoices
-        List<Invoice> filteredInvoices = _invoices;
+        // Apply filters to cached invoices (walk-in only)
+        List<Invoice> filteredInvoices = List<Invoice>.from(_invoices)
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
         
         // Payment method filter
         if (_selectedPaymentMethod != null) {
@@ -426,7 +431,9 @@ class _InvoicesPageState extends State<InvoicesPage> {
                               cells: [
                                 DataCell(Text('#${invoice.id}')),
                                 DataCell(Text(_dateFormat.format(invoice.createdAt))),
-                                DataCell(Text(invoice.customerName ?? 'Walk-in')),
+                                DataCell(Text(
+                                  invoice.customerName ?? LocalizationService().get('walkInCustomer'),
+                                )),
                                 DataCell(Text('${invoice.items?.length ?? 0}')),
                                 DataCell(
                                   Text(

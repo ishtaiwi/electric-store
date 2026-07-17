@@ -6,6 +6,8 @@ import '../../../../core/services/localization_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/sale_record.dart';
 import '../bloc/all_sales_bloc.dart';
+import 'account_ledger_profit_page.dart';
+import 'daily_customer_sales_page.dart';
 
 class AllSalesPage extends StatefulWidget {
   const AllSalesPage({super.key});
@@ -145,6 +147,45 @@ class _AllSalesPageState extends State<AllSalesPage> {
                   ],
                 ),
               ),
+              // Account statement profit report
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AccountLedgerProfitPage(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.account_balance, size: 18),
+                label: Text(l10n.get('accountLedgerProfit')),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Daily customer sales (ledger order)
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const DailyCustomerSalesPage(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.people_alt_outlined, size: 18),
+                label: Text(l10n.get('dailyCustomerSales')),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(width: 8),
               // Refresh button
               IconButton(
                 onPressed: () => context.read<AllSalesBloc>().add(AllSalesRefresh()),

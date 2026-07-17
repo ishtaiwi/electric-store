@@ -65,7 +65,7 @@ Future<void> init() async {
   // Repositories
   sl.registerLazySingleton<AuthRepository>(() => AuthRepositoryImpl(sl()));
   sl.registerLazySingleton<ProductRepository>(() => ProductRepositoryImpl(sl()));
-  sl.registerLazySingleton<SalesRepository>(() => SalesRepositoryImpl(sl()));
+  sl.registerLazySingleton<SalesRepository>(() => SalesRepositoryImpl(sl(), sl()));
   sl.registerLazySingleton<CustomerRepository>(() => CustomerRepositoryImpl(sl()));
   sl.registerLazySingleton<InvoiceRepository>(() => InvoiceRepositoryImpl(sl()));
   sl.registerLazySingleton<ReportRepository>(() => ReportRepositoryImpl(sl()));

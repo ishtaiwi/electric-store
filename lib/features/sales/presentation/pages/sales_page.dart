@@ -3,13 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../../core/services/cache_service.dart';
 import '../../../../core/services/localization_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/di/injection_container.dart' as di;
 import '../../../auth/presentation/bloc/auth_bloc.dart';
-import '../../../customers/domain/entities/customer.dart';
-import '../../../customers/domain/repositories/customer_repository.dart';
 import '../../../invoices/presentation/bloc/invoice_bloc.dart';
 import '../../../invoices/domain/repositories/invoice_repository.dart';
 import '../../../products/domain/entities/product.dart';
@@ -30,25 +27,15 @@ class _SalesPageState extends State<SalesPage> {
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
   Timer? _debounceTimer;
-  List<Customer> _customers = [];
   int _quantityToAdd = 1;
 
   @override
   void initState() {
     super.initState();
-    _loadCustomers();
     // Auto-focus search field for barcode scanning
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _searchFocusNode.requestFocus();
     });
-  }
-
-  Future<void> _loadCustomers() async {
-    final customerRepo = di.sl<CustomerRepository>();
-    // Invalidate cache to get fresh data
-    CacheService().invalidate('all_customers');
-    _customers = await customerRepo.getAllCustomers();
-    if (mounted) setState(() {});
   }
 
   @override
@@ -138,15 +125,11 @@ class _SalesPageState extends State<SalesPage> {
   Future<void> _showCheckoutDialog() async {
     final state = context.read<SalesBloc>().state;
     if (state is SalesReady && state.cart.isNotEmpty) {
-      // Always refresh customer list before showing checkout
-      await _loadCustomers();
-      if (!mounted) return;
       showDialog(
         context: context,
         builder: (dialogContext) => BlocProvider.value(
           value: context.read<SalesBloc>(),
           child: CheckoutDialog(
-            customers: _customers,
             onCheckout: _checkout,
           ),
         ),
@@ -297,13 +280,20 @@ class _SalesPageState extends State<SalesPage> {
           }
           
           if (!context.mounted) return;
+          final isAccountSale = state.invoice.isAccountInvoice;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Row(
                 children: [
                   const Icon(Icons.check_circle, color: Colors.white),
                   const SizedBox(width: 12),
-                  Text('${l10n.get('saleCompletedInvoice')} ${state.invoice.invoiceNumber}'),
+                  Expanded(
+                    child: Text(
+                      isAccountSale
+                          ? l10n.get('postedToAccountLedger')
+                          : '${l10n.get('saleCompletedInvoice')} ${state.invoice.invoiceNumber}',
+                    ),
+                  ),
                 ],
               ),
               backgroundColor: AppColors.success,
@@ -394,7 +384,6 @@ class _SalesPageState extends State<SalesPage> {
                                   IconButton(
                                     onPressed: () {
                                       context.read<SalesBloc>().add(SalesRefresh());
-                                      _loadCustomers();
                                     },
                                     icon: const Icon(Icons.refresh_rounded),
                                     color: AppColors.primary,

@@ -1,7 +1,10 @@
+import 'package:sqflite/sqflite.dart';
+
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/services/cache_service.dart';
 import '../../../../core/services/audit_logger_service.dart';
 import '../../domain/entities/product.dart';
+import '../../domain/exceptions/product_in_use_exception.dart';
 import '../../domain/repositories/product_repository.dart';
 
 class ProductRepositoryImpl implements ProductRepository {
@@ -183,19 +186,48 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   Future<int> deleteProduct(int id) async {
     final db = await _databaseHelper.database;
-    
-    // Get product info for audit
+
     final productResult = await db.query('products', where: 'id = ?', whereArgs: [id]);
-    final productName = productResult.isNotEmpty 
-        ? productResult.first['name'] as String? 
-        : null;
-    
-    final result = await db.delete(
-      'products',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-    
+    if (productResult.isEmpty) return 0;
+
+    final productName = productResult.first['name'] as String?;
+
+    final salesCount = Sqflite.firstIntValue(await db.rawQuery(
+          'SELECT COUNT(*) FROM sales WHERE product_id = ?',
+          [id],
+        )) ??
+        0;
+    final cancelledSalesCount = Sqflite.firstIntValue(await db.rawQuery(
+          'SELECT COUNT(*) FROM cancelled_sales WHERE product_id = ?',
+          [id],
+        )) ??
+        0;
+
+    if (salesCount > 0 || cancelledSalesCount > 0) {
+      throw ProductInUseException(
+        salesCount: salesCount,
+        cancelledSalesCount: cancelledSalesCount,
+      );
+    }
+
+    final result = await db.transaction((txn) async {
+      await txn.delete(
+        'inventory_adjustments',
+        where: 'product_id = ?',
+        whereArgs: [id],
+      );
+      await txn.delete(
+        'price_list_items',
+        where: 'product_id = ?',
+        whereArgs: [id],
+      );
+      return txn.delete(
+        'products',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    });
+
     if (result > 0) {
       _auditLogger.log(
         action: AuditAction.productDeleted,
@@ -204,8 +236,7 @@ class ProductRepositoryImpl implements ProductRepository {
         entityName: productName,
       );
     }
-    
-    // Invalidate caches
+
     _cache.invalidateProductRelated();
     _cache.invalidate(CacheKeys.productById(id));
     return result;

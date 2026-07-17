@@ -38,7 +38,7 @@ class Invoice extends Equatable {
     this.items,
   });
 
-  // Convenience getters for UI
+  bool get isAccountInvoice => paymentMethod == 'account';
   DateTime get createdAt => createdDate ?? DateTime.now();
   double get subtotal => totalAmount;
   double get remainingAmount => finalAmount - paidAmount;

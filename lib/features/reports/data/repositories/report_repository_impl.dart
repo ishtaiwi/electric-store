@@ -21,45 +21,53 @@ class ReportRepositoryImpl implements ReportRepository {
 
     // Run all queries in parallel for better performance
     final results = await Future.wait([
-      // 0: Today's sales
+      // 0: Today's sales revenue
       db.rawQuery('''
-        SELECT COALESCE(SUM(final_amount), 0) as total, COALESCE(SUM(total_profit), 0) as profit
+        SELECT COALESCE(SUM(final_amount), 0) as total
         FROM invoices WHERE date(created_date) = date(?)
       ''', [startOfDay.toIso8601String()]),
+
+      // 1: Today's profit — registered products only (exclude custom items)
+      db.rawQuery('''
+        SELECT COALESCE(SUM(profit), 0) as profit
+        FROM sales
+        WHERE date(sale_date) = date(?)
+          AND product_id IS NOT NULL
+      ''', [startOfDay.toIso8601String()]),
       
-      // 1: Monthly sales
+      // 2: Monthly sales
       db.rawQuery('''
         SELECT COALESCE(SUM(final_amount), 0) as total, COALESCE(SUM(total_profit), 0) as profit
         FROM invoices WHERE date(created_date) >= date(?)
       ''', [startOfMonth.toIso8601String()]),
       
-      // 2: Product count
+      // 3: Product count
       db.rawQuery('SELECT COUNT(*) as count FROM products'),
       
-      // 3: Low stock count
+      // 4: Low stock count
       db.rawQuery(
         'SELECT COUNT(*) as count FROM products WHERE quantity <= min_stock AND quantity > 0',
       ),
       
-      // 4: Out of stock count
+      // 5: Out of stock count
       db.rawQuery(
         'SELECT COUNT(*) as count FROM products WHERE quantity = 0',
       ),
       
-      // 5: Customer count
+      // 6: Customer count
       db.rawQuery('SELECT COUNT(*) as count FROM customers'),
       
-      // 6: Today's invoice count
+      // 7: Today's invoice count
       db.rawQuery('''
         SELECT COUNT(*) as count FROM invoices WHERE date(created_date) = date(?)
       ''', [startOfDay.toIso8601String()]),
       
-      // 7: Total inventory value
+      // 8: Total inventory value
       db.rawQuery(
         'SELECT COALESCE(SUM(quantity * cost_price), 0) as value FROM products',
       ),
       
-      // 8: Customer debts
+      // 9: Customer debts
       db.rawQuery('''
         SELECT COALESCE(SUM(inv_debt), 0) + COALESCE(SUM(adj), 0) as total
         FROM (
@@ -72,18 +80,19 @@ class ReportRepositoryImpl implements ReportRepository {
     ]);
 
     final todaySales = results[0];
-    final monthlySales = results[1];
-    final productCount = results[2];
-    final lowStockCount = results[3];
-    final outOfStockCount = results[4];
-    final customerCount = results[5];
-    final invoiceCount = results[6];
-    final inventoryValue = results[7];
-    final debts = results[8];
+    final todayProfit = results[1];
+    final monthlySales = results[2];
+    final productCount = results[3];
+    final lowStockCount = results[4];
+    final outOfStockCount = results[5];
+    final customerCount = results[6];
+    final invoiceCount = results[7];
+    final inventoryValue = results[8];
+    final debts = results[9];
 
     final result = {
       'todaySales': (todaySales.first['total'] as num?)?.toDouble() ?? 0,
-      'todayProfit': (todaySales.first['profit'] as num?)?.toDouble() ?? 0,
+      'todayProfit': (todayProfit.first['profit'] as num?)?.toDouble() ?? 0,
       'monthlySales': (monthlySales.first['total'] as num?)?.toDouble() ?? 0,
       'monthlyProfit': (monthlySales.first['profit'] as num?)?.toDouble() ?? 0,
       'productCount': productCount.first['count'] as int? ?? 0,

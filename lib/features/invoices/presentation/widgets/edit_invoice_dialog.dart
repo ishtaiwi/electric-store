@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/di/injection_container.dart' as di;
 import '../../../../core/services/localization_service.dart';
+import '../../../../core/services/smart_search_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../customers/presentation/bloc/customer_bloc.dart';
 import '../../../products/domain/entities/product.dart';
@@ -17,11 +20,14 @@ import '../bloc/invoice_bloc.dart';
 class EditInvoiceDialog extends StatefulWidget {
   final Invoice invoice;
   final List<SaleItem> items;
+  /// When true, closes the parent dialog after save (e.g. invoice details).
+  final bool closeParentOnSave;
 
   const EditInvoiceDialog({
     super.key,
     required this.invoice,
     required this.items,
+    this.closeParentOnSave = false,
   });
 
   @override
@@ -37,6 +43,10 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
   String? _selectedCustomerName;
   List<Product> _searchResults = [];
   bool _isSearching = false;
+  Timer? _debounceTimer;
+  final _smartSearch = SmartSearchService();
+
+  bool get _isAccountInvoice => widget.invoice.isAccountInvoice;
 
   @override
   void initState() {
@@ -57,6 +67,7 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _discountController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -71,7 +82,7 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
   double get _finalAmount => _totalAmount - _discount;
 
   Future<void> _searchProducts(String query) async {
-    if (query.isEmpty) {
+    if (query.trim().isEmpty) {
       setState(() {
         _searchResults = [];
         _isSearching = false;
@@ -81,8 +92,21 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
 
     setState(() => _isSearching = true);
     try {
-      final repo = di.sl<ProductRepository>();
-      final results = await repo.searchProducts(query);
+      final smartResults = await _smartSearch.smartSearchProducts(query.trim());
+      final results = smartResults.map((map) => Product(
+            id: map['id'] as int?,
+            name: (map['name'] as String?) ?? '',
+            barcode: map['barcode'] as String?,
+            quantity: (map['quantity'] as int?) ?? 0,
+            price: (map['price'] as num?)?.toDouble() ?? 0.0,
+            costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0.0,
+            note: map['note'] as String?,
+            supplier: map['supplier'] as String?,
+            minStock: (map['min_stock'] as int?) ?? 5,
+            lastUpdated: map['last_updated'] != null
+                ? DateTime.tryParse(map['last_updated'].toString())
+                : null,
+          )).toList();
       if (mounted) {
         setState(() {
           _searchResults = results;
@@ -90,7 +114,44 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _isSearching = false);
+      try {
+        final repo = di.sl<ProductRepository>();
+        final results = await repo.searchProducts(query.trim());
+        if (mounted) {
+          setState(() {
+            _searchResults = results;
+            _isSearching = false;
+          });
+        }
+      } catch (_) {
+        if (mounted) setState(() => _isSearching = false);
+      }
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    _debounceTimer?.cancel();
+    if (value.isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+      return;
+    }
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) _searchProducts(value);
+    });
+    setState(() {});
+  }
+
+  Future<void> _handleBarcodeInput(String barcode) async {
+    _debounceTimer?.cancel();
+    final product = await di.sl<ProductRepository>().getProductByBarcode(barcode.trim());
+    if (!mounted) return;
+    if (product != null && product.quantity > 0) {
+      _addProduct(product);
+    } else {
+      _searchProducts(barcode);
     }
   }
 
@@ -434,7 +495,7 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
       discountAmount: _discount,
       customerName: _selectedCustomerName,
       customerId: _selectedCustomerId,
-      paymentMethod: _paymentMethod,
+      paymentMethod: _isAccountInvoice ? 'account' : _paymentMethod,
       paidAmount: widget.invoice.paidAmount,
     ));
 
@@ -442,9 +503,10 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
     di.sl<CustomerBloc>().add(CustomerRefresh());
     di.sl<ProductBloc>().add(ProductRefresh());
 
-    Navigator.pop(context);
-    // Also close the details dialog
-    Navigator.pop(context);
+    Navigator.pop(context, true);
+    if (widget.closeParentOnSave) {
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -540,13 +602,15 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
                   children: [
                     // ─── Customer (select from existing customers) ───
                     InkWell(
-                      onTap: _openCustomerPicker,
+                      onTap: _isAccountInvoice ? null : _openCustomerPicker,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey.shade300),
                           borderRadius: BorderRadius.circular(10),
-                          color: AppColors.surface,
+                          color: _isAccountInvoice
+                              ? AppColors.background.withOpacity(0.5)
+                              : AppColors.surface,
                         ),
                         child: Row(
                           children: [
@@ -555,12 +619,19 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
                             Expanded(
                               child: Text(
                                 _selectedCustomerName ?? LocalizationService().get('selectCustomer'),
-                                style: TextStyle(fontSize: 14, color: _selectedCustomerName == null ? AppColors.textHint : AppColors.textPrimary),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: _selectedCustomerName == null
+                                      ? AppColors.textHint
+                                      : AppColors.textPrimary,
+                                ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
+                            if (_isAccountInvoice)
+                              Icon(Icons.lock_outline, size: 18, color: AppColors.textSecondary)
+                            else
+                              Icon(Icons.arrow_drop_down, color: AppColors.textSecondary),
                           ],
                         ),
                       ),
@@ -599,7 +670,7 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
                       controller: _searchController,
                       decoration: InputDecoration(
                         hintText: LocalizationService()
-                            .get('searchAndAddProducts'),
+                            .get('searchProductsOrScan'),
                         prefixIcon: const Icon(Icons.search, size: 20),
                         suffixIcon: _isSearching
                             ? const Padding(
@@ -611,18 +682,23 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
                                 ? IconButton(
                                     icon: const Icon(Icons.clear, size: 18),
                                     onPressed: () {
+                                      _debounceTimer?.cancel();
                                       _searchController.clear();
                                       setState(() => _searchResults = []);
                                     },
                                   )
-                                : null,
+                                : const Padding(
+                                    padding: EdgeInsets.only(right: 8),
+                                    child: Icon(Icons.qr_code_scanner, color: AppColors.primary, size: 20),
+                                  ),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 10),
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10)),
                       ),
-                      onChanged: _searchProducts,
+                      onChanged: _onSearchChanged,
+                      onSubmitted: _handleBarcodeInput,
                     ),
 
                     // Search results dropdown
@@ -981,37 +1057,61 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
                         const SizedBox(width: 16),
                         // Payment method
                         Expanded(
-                          child: DropdownButtonFormField<String>(
-                            value: _paymentMethod,
-                            decoration: InputDecoration(
-                              labelText: LocalizationService()
-                                  .get('paymentMethod'),
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                            ),
-                            items: [
-                              DropdownMenuItem(
-                                  value: 'cash',
-                                  child: Text(
-                                      LocalizationService().get('cash'))),
-                              DropdownMenuItem(
-                                  value: 'card',
-                                  child: Text(
-                                      LocalizationService().get('card'))),
-                              DropdownMenuItem(
-                                  value: 'credit',
-                                  child: Text(
-                                      LocalizationService().get('credit'))),
-                            ],
-                            onChanged: (value) {
-                              if (value != null) {
-                                setState(() => _paymentMethod = value);
-                              }
-                            },
-                          ),
+                          child: _isAccountInvoice
+                              ? InputDecorator(
+                                  decoration: InputDecoration(
+                                    labelText: LocalizationService().get('paymentMethod'),
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 10),
+                                    border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8)),
+                                    filled: true,
+                                    fillColor: AppColors.background.withOpacity(0.5),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.account_balance_wallet_outlined,
+                                          size: 18, color: AppColors.primary),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        LocalizationService().get('accountStatement'),
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : DropdownButtonFormField<String>(
+                                  value: _paymentMethod,
+                                  decoration: InputDecoration(
+                                    labelText: LocalizationService()
+                                        .get('paymentMethod'),
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 10),
+                                    border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  items: [
+                                    DropdownMenuItem(
+                                        value: 'cash',
+                                        child: Text(
+                                            LocalizationService().get('cash'))),
+                                    DropdownMenuItem(
+                                        value: 'card',
+                                        child: Text(
+                                            LocalizationService().get('card'))),
+                                    DropdownMenuItem(
+                                        value: 'credit',
+                                        child: Text(LocalizationService()
+                                            .get('credit'))),
+                                  ],
+                                  onChanged: (value) {
+                                    if (value != null) {
+                                      setState(() => _paymentMethod = value);
+                                    }
+                                  },
+                                ),
                         ),
                       ],
                     ),

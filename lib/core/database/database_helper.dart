@@ -69,7 +69,7 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 13,
+      version: 14,
       onCreate: dbExists ? null : _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: _onConfigure,
@@ -270,6 +270,23 @@ class DatabaseHelper {
           WHERE customer_id IS NOT NULL
         ''');
       }
+    }
+    // Migration: v13 -> v14: Ledger and customer balance performance indexes
+    if (oldVersion < 14) {
+      await _createScalabilityIndexes(db);
+    }
+  }
+
+  Future<void> _createScalabilityIndexes(Database db) async {
+    final indexes = [
+      'CREATE INDEX IF NOT EXISTS idx_invoices_customer_sale_date ON invoices(customer_id, sale_date, id)',
+      'CREATE INDEX IF NOT EXISTS idx_customer_payments_customer_date ON customer_payments(customer_id, payment_date)',
+      'CREATE INDEX IF NOT EXISTS idx_sales_customer_invoice ON sales(customer_id, invoice_id)',
+    ];
+    for (final sql in indexes) {
+      try {
+        await db.execute(sql);
+      } catch (_) {}
     }
   }
 

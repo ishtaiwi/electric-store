@@ -68,6 +68,7 @@ class _InvoiceDetailsDialogState extends State<InvoiceDetailsDialog> {
         child: EditInvoiceDialog(
           invoice: widget.invoice,
           items: items,
+          closeParentOnSave: true,
         ),
       ),
     );

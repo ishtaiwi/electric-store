@@ -10,11 +10,13 @@ import '../bloc/customer_bloc.dart';
 class CustomerRecordPaymentDialog extends StatefulWidget {
   final Invoice invoice;
   final int customerId;
+  final double? accountOutstanding;
 
   const CustomerRecordPaymentDialog({
     super.key,
     required this.invoice,
     required this.customerId,
+    this.accountOutstanding,
   });
 
   @override
@@ -58,17 +60,19 @@ class _CustomerRecordPaymentDialogState extends State<CustomerRecordPaymentDialo
     }
   }
 
+  double get _outstanding =>
+      widget.accountOutstanding ?? widget.invoice.remainingAmount;
+
   void _payFull() {
-    final remaining = widget.invoice.remainingAmount;
-    if (remaining > 0) {
-      _amountController.text = remaining.toStringAsFixed(2);
+    if (_outstanding > 0) {
+      _amountController.text = _outstanding.toStringAsFixed(2);
       setState(() {});
     }
   }
 
   bool get _isOverpaying {
     final amount = double.tryParse(_amountController.text.trim()) ?? 0;
-    return amount > widget.invoice.remainingAmount && widget.invoice.remainingAmount >= 0;
+    return amount > _outstanding && _outstanding >= 0;
   }
 
   void _submit() {
@@ -96,7 +100,8 @@ class _CustomerRecordPaymentDialogState extends State<CustomerRecordPaymentDialo
   Widget build(BuildContext context) {
     final loc = LocalizationService();
     final dateFormat = DateFormat('yyyy-MM-dd');
-    final remaining = widget.invoice.remainingAmount;
+    final remaining = _outstanding;
+    final isAccountPayment = widget.accountOutstanding != null;
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
@@ -122,7 +127,9 @@ class _CustomerRecordPaymentDialogState extends State<CustomerRecordPaymentDialo
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      '${loc.get('paymentForInvoice')} #${widget.invoice.invoiceNumber}',
+                      isAccountPayment
+                          ? loc.get('recordPayment')
+                          : '${loc.get('paymentForInvoice')} #${widget.invoice.invoiceNumber}',
                       style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -156,7 +163,11 @@ class _CustomerRecordPaymentDialogState extends State<CustomerRecordPaymentDialo
                         ),
                         child: Column(
                           children: [
-                            _infoRow(loc.get('invoiceNumberLabel'), '#${widget.invoice.invoiceNumber}'),
+                            if (isAccountPayment)
+                              _infoRow(loc.get('accountStatement'), loc.get('customerAccountLedger'))
+                            else
+                              _infoRow(loc.get('invoiceNumberLabel'), '#${widget.invoice.invoiceNumber}'),
+                            if (!isAccountPayment) ...[
                             const SizedBox(height: 6),
                             _infoRow(loc.get('totalAmountLabel'),
                                 LocalizationService().formatCurrency(widget.invoice.finalAmount)),
@@ -164,6 +175,7 @@ class _CustomerRecordPaymentDialogState extends State<CustomerRecordPaymentDialo
                             _infoRow(loc.get('paidAmountLabel'),
                                 LocalizationService().formatCurrency(widget.invoice.paidAmount),
                                 valueColor: AppColors.success),
+                            ],
                             Divider(color: AppColors.primary.withOpacity(0.2), height: 16),
                             _infoRow(
                               loc.get('remainingBalanceLabel'),

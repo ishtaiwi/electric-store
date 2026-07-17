@@ -27,6 +27,11 @@ abstract class InvoiceRepository {
   
   // Notes update
   Future<int> updateInvoiceNotes(int invoiceId, String? notes);
+
+  /// Update note on a single sale line item (`sales.note`).
+  Future<int> updateSaleItemNote(int saleId, String? note);
+
+  Future<Invoice?> updateInvoiceDiscount(int invoiceId, double discountAmount);
   
   // Pagination support
   Future<List<Invoice>> getInvoicesPaginated({int limit = 50, int offset = 0});

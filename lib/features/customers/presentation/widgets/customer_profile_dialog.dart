@@ -12,7 +12,7 @@ import '../../../invoices/presentation/bloc/invoice_bloc.dart';
 import '../../../settings/domain/repositories/settings_repository.dart';
 import '../../domain/entities/customer.dart';
 import '../bloc/customer_bloc.dart';
-import 'customer_financial_dialog.dart';
+import '../pages/customer_account_statement_page.dart';
 import 'customer_form_dialog.dart';
 
 class CustomerProfileDialog extends StatefulWidget {
@@ -371,16 +371,23 @@ class _CustomerProfileDialogState extends State<CustomerProfileDialog>
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (dialogContext) => BlocProvider.value(
-                        value: context.read<CustomerBloc>(),
-                        child: CustomerFinancialDialog(customer: widget.customer),
+                    final bloc = context.read<CustomerBloc>();
+                    final customer = widget.customer;
+                    final navigator = Navigator.of(context);
+                    navigator.pop(); // close profile dialog
+                    navigator
+                        .push(
+                      MaterialPageRoute(
+                        builder: (_) => BlocProvider.value(
+                          value: bloc,
+                          child: CustomerAccountStatementPage(customer: customer),
+                        ),
                       ),
-                    ).then((_) => _loadInvoices());
+                    )
+                        .then((_) => bloc.add(CustomerRefresh()));
                   },
                   icon: const Icon(Icons.account_balance_wallet, size: 18),
-                  label: Text(LocalizationService().get('customerFinancial')),
+                  label: Text(LocalizationService().get('accountStatement')),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.success,
                     foregroundColor: Colors.white,

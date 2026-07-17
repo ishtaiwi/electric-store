@@ -604,20 +604,27 @@ class ChatbotService {
     final db = await _db.database;
     final today = _dateFormat.format(DateTime.now());
     
-    final result = await db.rawQuery('''
-      SELECT 
-        COUNT(*) as invoice_count,
-        COALESCE(SUM(final_amount), 0) as total_sales,
-        COALESCE(SUM(total_profit), 0) as total_profit,
-        COALESCE(SUM(paid_amount), 0) as total_paid
-      FROM invoices 
-      WHERE date(created_date) = date(?)
-    ''', [today]);
+    final results = await Future.wait([
+      db.rawQuery('''
+        SELECT 
+          COUNT(*) as invoice_count,
+          COALESCE(SUM(final_amount), 0) as total_sales,
+          COALESCE(SUM(paid_amount), 0) as total_paid
+        FROM invoices 
+        WHERE date(created_date) = date(?)
+      ''', [today]),
+      db.rawQuery('''
+        SELECT COALESCE(SUM(profit), 0) as total_profit
+        FROM sales
+        WHERE date(sale_date) = date(?)
+          AND product_id IS NOT NULL
+      ''', [today]),
+    ]);
 
-    final data = result.first;
+    final data = results[0].first;
     final invoiceCount = data['invoice_count'] as int;
     final totalSales = (data['total_sales'] as num?)?.toDouble() ?? 0;
-    final totalProfit = (data['total_profit'] as num?)?.toDouble() ?? 0;
+    final totalProfit = (results[1].first['total_profit'] as num?)?.toDouble() ?? 0;
     final totalPaid = (data['total_paid'] as num?)?.toDouble() ?? 0;
     final unpaid = totalSales - totalPaid;
 

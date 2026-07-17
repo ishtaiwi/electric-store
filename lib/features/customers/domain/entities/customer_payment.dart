@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 enum CustomerPaymentMethod {
   cash,
   cheque,
+  discount,
 }
 
 class CustomerPayment extends Equatable {
@@ -36,6 +37,7 @@ class CustomerPayment extends Equatable {
 
   bool get isCash => paymentMethod == CustomerPaymentMethod.cash;
   bool get isCheque => paymentMethod == CustomerPaymentMethod.cheque;
+  bool get isDiscount => paymentMethod == CustomerPaymentMethod.discount;
 
   factory CustomerPayment.fromMap(Map<String, dynamic> map) {
     return CustomerPayment(
@@ -44,9 +46,11 @@ class CustomerPayment extends Equatable {
       customerId: map['customer_id'] as int,
       amount: (map['amount'] as num).toDouble(),
       paymentDate: DateTime.parse(map['payment_date'] as String),
-      paymentMethod: (map['payment_method'] as String?) == 'cheque'
-          ? CustomerPaymentMethod.cheque
-          : CustomerPaymentMethod.cash,
+      paymentMethod: switch (map['payment_method'] as String?) {
+        'cheque' => CustomerPaymentMethod.cheque,
+        'discount' => CustomerPaymentMethod.discount,
+        _ => CustomerPaymentMethod.cash,
+      },
       chequeNumber: map['cheque_number'] as String?,
       notes: map['notes'] as String?,
       createdDate: map['created_date'] != null
@@ -64,7 +68,11 @@ class CustomerPayment extends Equatable {
       'customer_id': customerId,
       'amount': amount,
       'payment_date': paymentDate.toIso8601String(),
-      'payment_method': paymentMethod == CustomerPaymentMethod.cheque ? 'cheque' : 'cash',
+      'payment_method': switch (paymentMethod) {
+        CustomerPaymentMethod.cheque => 'cheque',
+        CustomerPaymentMethod.discount => 'discount',
+        CustomerPaymentMethod.cash => 'cash',
+      },
       'cheque_number': chequeNumber,
       'notes': notes,
     };

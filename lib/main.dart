@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -11,6 +12,7 @@ import 'core/theme/app_theme.dart';
 import 'core/services/localization_service.dart';
 import 'core/database/database_helper.dart';
 import 'core/database/test_database_generator.dart';
+import 'core/utils/keyboard_error_handler.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/pages/login_page.dart';
 import 'features/dashboard/presentation/pages/dashboard_page.dart';
@@ -27,10 +29,7 @@ void main() async {
     WidgetsFlutterBinding.ensureInitialized();
 
     // Set global error handler for Flutter framework errors
-    FlutterError.onError = (FlutterErrorDetails details) {
-      FlutterError.presentError(details);
-      debugPrint('Flutter error: ${details.exception}');
-    };
+    FlutterError.onError = handleFlutterFrameworkError;
 
     // Initialize FFI for desktop
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
@@ -84,19 +83,30 @@ class ElectricalStoreApp extends StatefulWidget {
   State<ElectricalStoreApp> createState() => _ElectricalStoreAppState();
 }
 
-class _ElectricalStoreAppState extends State<ElectricalStoreApp> {
+class _ElectricalStoreAppState extends State<ElectricalStoreApp>
+    with WidgetsBindingObserver {
   final _localizationService = LocalizationService();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _localizationService.addListener(_onLocaleChange);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _localizationService.removeListener(_onLocaleChange);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      HardwareKeyboard.instance.syncKeyboardState();
+    }
   }
 
   void _onLocaleChange() {

@@ -1,18 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/di/injection_container.dart' as di;
 import '../../../../core/services/localization_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../customers/domain/entities/customer.dart';
+import '../../../customers/domain/repositories/customer_repository.dart';
 import '../bloc/sales_bloc.dart';
 
 class CheckoutDialog extends StatefulWidget {
-  final List<Customer> customers;
   final Function(int? customerId, String paymentMethod, double discount, double? paidAmount) onCheckout;
 
   const CheckoutDialog({
     super.key,
-    required this.customers,
     required this.onCheckout,
   });
 
@@ -21,7 +23,12 @@ class CheckoutDialog extends StatefulWidget {
 }
 
 class _CheckoutDialogState extends State<CheckoutDialog> {
+  final _customerRepository = di.sl<CustomerRepository>();
   int? _selectedCustomerId;
+  Customer? _selectedCustomer;
+  List<Customer> _customerOptions = [];
+  Timer? _customerSearchDebounce;
+  String _customerSearchQuery = '';
   String _paymentMethod = 'cash';
   final _discountController = TextEditingController(text: '0');
   final _paidAmountController = TextEditingController();
@@ -29,7 +36,30 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
   bool _isFullPayment = true;
 
   @override
+  void initState() {
+    super.initState();
+    _loadCustomerOptions('');
+  }
+
+  Future<void> _loadCustomerOptions(String query) async {
+    final customers = query.trim().isEmpty
+        ? await _customerRepository.getCustomersPaginated(limit: 50)
+        : await _customerRepository.searchCustomers(query.trim());
+    if (!mounted || query != _customerSearchQuery) return;
+    setState(() => _customerOptions = customers);
+  }
+
+  void _onCustomerSearchChanged(String value) {
+    _customerSearchQuery = value;
+    _customerSearchDebounce?.cancel();
+    _customerSearchDebounce = Timer(const Duration(milliseconds: 300), () {
+      _loadCustomerOptions(value);
+    });
+  }
+
+  @override
   void dispose() {
+    _customerSearchDebounce?.cancel();
     _discountController.dispose();
     _paidAmountController.dispose();
     super.dispose();
@@ -157,10 +187,11 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
                         // Customer selection with search
                         Autocomplete<Customer>(
                           optionsBuilder: (TextEditingValue textEditingValue) {
+                            _onCustomerSearchChanged(textEditingValue.text);
                             if (textEditingValue.text.isEmpty) {
-                              return widget.customers;
+                              return _customerOptions;
                             }
-                            return widget.customers.where((customer) =>
+                            return _customerOptions.where((customer) =>
                                 customer.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) ||
                                 (customer.phone?.contains(textEditingValue.text) ?? false));
                           },
@@ -179,7 +210,10 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
                                         icon: const Icon(Icons.clear),
                                         onPressed: () {
                                           controller.clear();
-                                          setState(() => _selectedCustomerId = null);
+                                          setState(() {
+                                            _selectedCustomerId = null;
+                                            _selectedCustomer = null;
+                                          });
                                         },
                                       )
                                     : null,
@@ -203,7 +237,10 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
                                           leading: const Icon(Icons.person_outline),
                                           title: Text(loc.get('walkInCustomer')),
                                           onTap: () {
-                                            setState(() => _selectedCustomerId = null);
+                                            setState(() {
+                                              _selectedCustomerId = null;
+                                              _selectedCustomer = null;
+                                            });
                                             FocusManager.instance.primaryFocus?.unfocus();
                                           },
                                         );
@@ -234,23 +271,29 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
                             );
                           },
                           onSelected: (Customer customer) {
-                            setState(() => _selectedCustomerId = customer.id);
+                            setState(() {
+                              _selectedCustomerId = customer.id;
+                              _selectedCustomer = customer;
+                            });
                           },
                         ),
                         // Show selected customer badge
-                        if (_selectedCustomerId != null)
+                        if (_selectedCustomer != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: Chip(
                               avatar: const Icon(Icons.person, size: 18),
                               label: Text(
-                                widget.customers.firstWhere((c) => c.id == _selectedCustomerId).name,
+                                _selectedCustomer!.name,
                                 style: const TextStyle(fontWeight: FontWeight.w500),
                               ),
                               backgroundColor: AppColors.primary.withOpacity(0.1),
                               deleteIcon: const Icon(Icons.close, size: 16),
                               onDeleted: () {
-                                setState(() => _selectedCustomerId = null);
+                                setState(() {
+                                  _selectedCustomerId = null;
+                                  _selectedCustomer = null;
+                                });
                               },
                             ),
                           ),

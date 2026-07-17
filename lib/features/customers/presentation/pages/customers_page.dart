@@ -6,7 +6,6 @@ import '../../../../core/services/localization_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/customer.dart';
 import '../bloc/customer_bloc.dart';
-import '../widgets/customer_financial_dialog.dart';
 import '../widgets/customer_form_dialog.dart';
 import 'customer_account_statement_page.dart';
 
@@ -101,12 +100,15 @@ class _CustomersPageState extends State<CustomersPage> {
         }
       },
       builder: (context, state) {
-        // Update cached customers when list is loaded
+        final loc = LocalizationService();
         if (state is CustomerLoaded) {
           _customers = state.customers;
+          _showDebtOnly = state.debtOnly;
         }
 
-        List<Customer> customers = _customers;
+        final customers = _customers;
+        final hasMore = state is CustomerLoaded ? state.hasMore : false;
+        final isLoadingMore = state is CustomerLoaded ? state.isLoadingMore : false;
 
         return Padding(
           padding: const EdgeInsets.all(24),
@@ -197,19 +199,21 @@ class _CustomersPageState extends State<CustomersPage> {
 
               // Customers count
               Text(
-                '${customers.length} customers',
+                hasMore ? '${customers.length}+ ${loc.get('customers').toLowerCase()}' : '${customers.length} ${loc.get('customers').toLowerCase()}',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: AppColors.textSecondary,
                     ),
               ),
               const SizedBox(height: 8),
 
-              // Data Table
               Expanded(
                 child: state is CustomerLoading && _customers.isEmpty
                     ? const Center(child: CircularProgressIndicator())
-                    : Card(
-                        child: DataTable2(
+                    : Column(
+                        children: [
+                          Expanded(
+                            child: Card(
+                              child: DataTable2(
                           columnSpacing: 16,
                           horizontalMargin: 16,
                           minWidth: 700,
@@ -246,25 +250,9 @@ class _CustomersPageState extends State<CustomersPage> {
                                     children: [
                                       IconButton(
                                         icon: const Icon(Icons.account_balance_wallet, size: 20),
-                                        onPressed: () {
-                                          showDialog(
-                                            context: context,
-                                            builder: (dialogContext) => BlocProvider.value(
-                                              value: context.read<CustomerBloc>(),
-                                              child: CustomerFinancialDialog(customer: customer),
-                                            ),
-                                          ).then((_) {
-                                            context.read<CustomerBloc>().add(CustomerRefresh());
-                                          });
-                                        },
-                                        tooltip: LocalizationService().get('customerFinancial'),
-                                        color: AppColors.success,
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.receipt_long, size: 20),
                                         onPressed: () => _showAccountStatement(customer),
                                         tooltip: LocalizationService().get('accountStatement'),
-                                        color: AppColors.info,
+                                        color: AppColors.success,
                                       ),
                                       IconButton(
                                         icon: const Icon(Icons.edit, size: 20),
@@ -285,9 +273,31 @@ class _CustomersPageState extends State<CustomersPage> {
                             );
                           }).toList(),
                           empty: Center(
-                            child: Text(LocalizationService().get('noCustomersFound')),
+                            child: Text(loc.get('noCustomersFound')),
                           ),
-                        ),
+                              ),
+                            ),
+                          ),
+                          if (hasMore)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12, bottom: 4),
+                              child: isLoadingMore
+                                  ? const SizedBox(
+                                      height: 40,
+                                      child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                    )
+                                  : FilledButton.icon(
+                                      onPressed: () => context.read<CustomerBloc>().add(CustomerLoadMore()),
+                                      icon: const Icon(Icons.expand_more),
+                                      label: Text(loc.get('loadMore')),
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: AppColors.primary,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                      ),
+                                    ),
+                            ),
+                        ],
                       ),
               ),
             ],

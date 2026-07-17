@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import '../../../../core/services/localization_service.dart';
 import '../../../../core/services/smart_search_service.dart';
 import '../../domain/entities/product.dart';
+import '../../domain/exceptions/product_in_use_exception.dart';
 import '../../domain/repositories/product_repository.dart';
 
 // Events
@@ -399,7 +400,11 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
         hasMore: currentState is ProductLoaded ? (currentState).hasMore : false,
       ));
     } catch (e) {
-      emit(ProductError(e.toString()));
+      if (e is ProductInUseException) {
+        emit(ProductError(LocalizationService().get('cannotDeleteProductInUse')));
+      } else {
+        emit(ProductError(e.toString()));
+      }
     }
   }
 

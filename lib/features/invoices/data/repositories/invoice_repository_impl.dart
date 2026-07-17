@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/services/cache_service.dart';
 import '../../../../core/services/audit_logger_service.dart';
@@ -20,6 +22,10 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
     _cache.invalidateProductRelated();
   }
 
+  static const _displayFilter = '''
+    WHERE i.customer_id IS NULL
+  ''';
+
   @override
   Future<List<Invoice>> getAllInvoices() async {
     // Check cache first
@@ -31,6 +37,7 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
       SELECT i.*, c.name as customer_name
       FROM invoices i
       LEFT JOIN customers c ON i.customer_id = c.id
+      $_displayFilter
       ORDER BY i.created_date DESC
     ''');
     final invoices = result.map((map) => Invoice.fromMap(map)).toList();
@@ -113,6 +120,7 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
       FROM invoices i
       LEFT JOIN customers c ON i.customer_id = c.id
       WHERE date(i.created_date) BETWEEN date(?) AND date(?)
+      AND i.customer_id IS NULL
       ORDER BY i.created_date DESC
     ''', [start.toIso8601String(), end.toIso8601String()]);
     return result.map((map) => Invoice.fromMap(map)).toList();
@@ -402,12 +410,65 @@ class InvoiceRepositoryImpl implements InvoiceRepository {
   }
 
   @override
+  Future<int> updateSaleItemNote(int saleId, String? note) async {
+    final db = await _databaseHelper.database;
+    final result = await db.update(
+      'sales',
+      {'note': note},
+      where: 'id = ?',
+      whereArgs: [saleId],
+    );
+    if (result > 0) {
+      _auditLogger.log(
+        action: AuditAction.invoiceUpdated,
+        entityType: 'sale',
+        entityId: saleId,
+        details: 'Sale line note updated',
+      );
+    }
+    _invalidateCache();
+    return result;
+  }
+
+  @override
+  Future<Invoice?> updateInvoiceDiscount(int invoiceId, double discountAmount) async {
+    final invoice = await getInvoiceById(invoiceId);
+    if (invoice == null) return null;
+
+    final items = await getInvoiceItems(invoiceId);
+    if (items.isEmpty) return null;
+
+    final totalAmount = items.fold<double>(0, (sum, item) => sum + item.totalAmount);
+    final cappedDiscount = math.min(math.max(0, discountAmount), totalAmount).toDouble();
+
+    final updated = await updateInvoice(
+      invoiceId: invoiceId,
+      updatedItems: items,
+      discountAmount: cappedDiscount,
+      paidAmount: invoice.paidAmount,
+    );
+    if (updated == null) return null;
+
+    final db = await _databaseHelper.database;
+    await db.rawUpdate('''
+      UPDATE invoices SET paid_amount = (
+        SELECT COALESCE(SUM(amount), 0) FROM customer_payments
+        WHERE invoice_id = ? AND COALESCE(payment_method, 'cash') != 'discount'
+      ) WHERE id = ?
+    ''', [invoiceId, invoiceId]);
+
+    _invalidateCache();
+    return getInvoiceById(invoiceId);
+  }
+
+  @override
   Future<List<Invoice>> getInvoicesPaginated({int limit = 50, int offset = 0}) async {
     final db = await _databaseHelper.database;
     final result = await db.rawQuery('''
       SELECT i.*, c.name as customer_name
       FROM invoices i
       LEFT JOIN customers c ON i.customer_id = c.id
+      $_displayFilter
       ORDER BY i.created_date DESC
       LIMIT ? OFFSET ?
     ''', [limit, offset]);

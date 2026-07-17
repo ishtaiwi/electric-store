@@ -5,6 +5,8 @@ import 'package:printing/printing.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
 import '../../features/customers/domain/entities/customer.dart';
+import '../../features/customers/domain/entities/customer_ledger.dart';
+import '../../features/customers/domain/entities/customer_ledger_entry.dart';
 import '../../features/invoices/domain/entities/invoice.dart';
 import '../../features/invoices/domain/entities/sale_item.dart';
 import '../../features/price_lists/domain/entities/price_list.dart';
@@ -177,6 +179,187 @@ class PdfService {
         color: color,
         borderRadius: pw.BorderRadius.circular(2),
       ),
+    );
+  }
+
+  pw.Widget _buildStoreBrandingBlock({
+    required String storeName,
+    String storeAddress = '',
+    String storePhone = '',
+    String storeEmail = '',
+    PdfColor brandPrimary = const PdfColor.fromInt(0xFF1565C0),
+    PdfColor brandDark = const PdfColor.fromInt(0xFF0D47A1),
+    PdfColor brandAmber = const PdfColor.fromInt(0xFFFFC107),
+    double titleFontSize = 22,
+  }) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Row(
+          mainAxisSize: pw.MainAxisSize.min,
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  storeName,
+                  textDirection: pw.TextDirection.rtl,
+                  style: pw.TextStyle(
+                    fontSize: titleFontSize,
+                    fontWeight: pw.FontWeight.bold,
+                    color: brandDark,
+                  ),
+                ),
+                pw.SizedBox(height: 2),
+                _buildAccentBar(width: 50, height: 2, color: brandAmber),
+              ],
+            ),
+            pw.SizedBox(width: 10),
+            pw.Container(
+              width: 38,
+              height: 38,
+              decoration: pw.BoxDecoration(
+                color: brandPrimary,
+                borderRadius: pw.BorderRadius.circular(8),
+              ),
+              alignment: pw.Alignment.center,
+              child: _buildLightningBoltIcon(size: 22, color: brandAmber),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 6),
+        if (storeAddress.isNotEmpty)
+          pw.Text(
+            storeAddress,
+            textDirection: pw.TextDirection.rtl,
+            textAlign: pw.TextAlign.right,
+            style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+          ),
+        if (storePhone.isNotEmpty)
+          pw.Text(
+            'هاتف: $storePhone',
+            textDirection: pw.TextDirection.rtl,
+            textAlign: pw.TextAlign.right,
+            style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+          ),
+        if (storeEmail.isNotEmpty)
+          pw.Text(
+            'بريد: $storeEmail',
+            textDirection: pw.TextDirection.rtl,
+            textAlign: pw.TextAlign.right,
+            style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+          ),
+      ],
+    );
+  }
+
+  pw.Widget _buildDocumentTitleBadge(
+    String title, {
+    PdfColor brandPrimary = const PdfColor.fromInt(0xFF1565C0),
+    double fontSize = 18,
+  }) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: pw.BoxDecoration(
+        color: brandPrimary,
+        borderRadius: pw.BorderRadius.circular(6),
+      ),
+      child: pw.Text(
+        title,
+        textDirection: pw.TextDirection.rtl,
+        style: pw.TextStyle(
+          fontSize: fontSize,
+          fontWeight: pw.FontWeight.bold,
+          color: PdfColors.white,
+        ),
+      ),
+    );
+  }
+
+  pw.Widget _buildBalanceSummaryBranding({
+    required String currency,
+    required double totalSales,
+    required double totalPayments,
+    required double currentBalance,
+    PdfColor brandPrimary = const PdfColor.fromInt(0xFF1565C0),
+    PdfColor brandDark = const PdfColor.fromInt(0xFF0D47A1),
+    PdfColor brandAmber = const PdfColor.fromInt(0xFFFFC107),
+    PdfColor debitColor = const PdfColor.fromInt(0xFFC62828),
+    PdfColor creditColor = const PdfColor.fromInt(0xFF2E7D32),
+  }) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.end,
+      children: [
+        pw.SizedBox(
+          width: double.infinity,
+          child: pw.Text(
+            'ملخص الرصيد',
+            textDirection: pw.TextDirection.rtl,
+            textAlign: pw.TextAlign.right,
+            style: const pw.TextStyle(fontSize: 11, color: PdfColors.black),
+          ),
+        ),
+        pw.SizedBox(height: 8),
+        _buildInfoRowAr('إجمالي المبيعات:', '$currency ${totalSales.toStringAsFixed(2)}'),
+        _buildInfoRowAr('إجمالي المدفوع:', '$currency ${totalPayments.toStringAsFixed(2)}'),
+        pw.Divider(color: brandPrimary, height: 14),
+        pw.SizedBox(
+          width: double.infinity,
+          child: pw.Text(
+            'الرصيد الحالي: $currency ${currentBalance.toStringAsFixed(2)}',
+            textDirection: pw.TextDirection.rtl,
+            textAlign: pw.TextAlign.right,
+            style: pw.TextStyle(
+              fontSize: 12,
+              fontWeight: pw.FontWeight.bold,
+              color: currentBalance > 0 ? debitColor : (currentBalance < 0 ? creditColor : brandDark),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  pw.Widget _buildCustomerDataBranding({
+    required String customerName,
+    required String customerCode,
+    String? phone,
+    String? address,
+    PdfColor brandPrimary = const PdfColor.fromInt(0xFF1565C0),
+    PdfColor brandDark = const PdfColor.fromInt(0xFF0D47A1),
+    PdfColor brandAmber = const PdfColor.fromInt(0xFFFFC107),
+  }) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.end,
+      children: [
+        pw.SizedBox(
+          width: double.infinity,
+          child: pw.Text(
+            'بيانات العميل',
+            textDirection: pw.TextDirection.rtl,
+            textAlign: pw.TextAlign.right,
+            style: const pw.TextStyle(fontSize: 11, color: PdfColors.black),
+          ),
+        ),
+        pw.SizedBox(height: 8),
+        pw.SizedBox(
+          width: double.infinity,
+          child: pw.Text(
+            customerName,
+            textDirection: pw.TextDirection.rtl,
+            textAlign: pw.TextAlign.right,
+            style: pw.TextStyle(
+              fontSize: 12,
+              fontWeight: pw.FontWeight.bold,
+              color: brandDark,
+            ),
+          ),
+        ),
+        _buildInfoRowAr('رقم الحساب:', customerCode),
+        if (phone != null && phone.isNotEmpty) _buildInfoRowAr('هاتف:', phone),
+        if (address != null && address.isNotEmpty) _buildInfoRowAr('عنوان:', address),
+      ],
     );
   }
 
@@ -826,6 +1009,17 @@ class PdfService {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
+  /// Strip characters that are illegal in Windows file names (`<>:"/\|?*`).
+  String _safeFileName(String raw, {String fallback = 'file'}) {
+    final cleaned = raw
+        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '')
+        .replaceAll(RegExp(r'[\x00-\x1F]'), '')
+        .replaceAll(RegExp(r'\s+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_|_$'), '');
+    return cleaned.isEmpty ? fallback : cleaned;
+  }
+
   String _formatPaymentMethod(String method) {
     switch (method) {
       case 'cash':
@@ -858,8 +1052,10 @@ class PdfService {
       await statementsDir.create(recursive: true);
     }
     
-    final fileName = 'Statement_${customer.name.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.pdf';
-    final filePath = '${statementsDir.path}/$fileName';
+    final safeName = _safeFileName(customer.name, fallback: 'customer');
+    final fileName =
+        'Statement_${safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    final filePath = '${statementsDir.path}${Platform.pathSeparator}$fileName';
     
     final file = File(filePath);
     await file.writeAsBytes(await pdf.save());
@@ -1240,8 +1436,12 @@ class PdfService {
       await priceListsDir.create(recursive: true);
     }
 
-    final safeName = priceList.title.replaceAll(RegExp(r'[^\w\s-]'), '').replaceAll(' ', '_');
-    final fileName = 'PriceList_${safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    final safeName = priceList.title
+        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '')
+        .replaceAll(RegExp(r'\s+'), '_')
+        .trim();
+    final fileName =
+        'PriceList_${safeName.isEmpty ? 'list' : safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf';
     final filePath = '${priceListsDir.path}/$fileName';
 
     final file = File(filePath);
@@ -1272,233 +1472,740 @@ class PdfService {
   ) async {
     final pdf = pw.Document(theme: _buildTheme());
 
-    final storeName = storeSettings?['store_name'] ?? 'Electrical Store';
+    const brandPrimary = PdfColor.fromInt(0xFF00796B);
+    const brandDark = PdfColor.fromInt(0xFF004D40);
+    const brandLight = PdfColor.fromInt(0xFFE0F2F1);
+    const brandAmber = PdfColor.fromInt(0xFFFFC107);
+
+    final storeName = storeSettings?['store_name'] ?? 'المحل الكهربائي';
     final storeAddress = storeSettings?['address'] ?? '';
     final storePhone = storeSettings?['phone'] ?? '';
     final storeEmail = storeSettings?['email'] ?? '';
-    final currency = storeSettings?['currency'] ?? 'ILS';
+    final currency = storeSettings?['currency'] ?? '₪';
 
     final totalAmount = items.fold(0.0, (sum, item) => sum + item.totalPrice);
 
+    pw.Widget arText(
+      String text, {
+      double fontSize = 10,
+      bool bold = false,
+      PdfColor? color,
+      pw.TextAlign align = pw.TextAlign.right,
+    }) {
+      return pw.Text(
+        text,
+        textDirection: pw.TextDirection.rtl,
+        textAlign: align,
+        style: _baseStyle(bold: bold, fontSize: fontSize, color: color),
+      );
+    }
+
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         textDirection: pw.TextDirection.rtl,
-        margin: const pw.EdgeInsets.all(32),
-        build: (context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              // Header
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        storeName,
-                        style: pw.TextStyle(
-                          fontSize: 24,
-                          fontWeight: pw.FontWeight.bold,
-                        ),
-                      ),
-                      pw.SizedBox(height: 4),
-                      if (storeAddress.isNotEmpty)
-                        pw.Text(storeAddress, style: const pw.TextStyle(fontSize: 10)),
-                      if (storePhone.isNotEmpty)
-                        pw.Text('Phone: $storePhone', style: const pw.TextStyle(fontSize: 10)),
-                      if (storeEmail.isNotEmpty)
-                        pw.Text('Email: $storeEmail', style: const pw.TextStyle(fontSize: 10)),
-                    ],
-                  ),
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.end,
-                    children: [
-                      pw.Text(
-                        'PRICE LIST',
-                        style: pw.TextStyle(
-                          fontSize: 28,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.teal,
-                        ),
-                      ),
-                      pw.SizedBox(height: 8),
-                      pw.Container(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: pw.BoxDecoration(
-                          color: PdfColors.teal50,
-                          borderRadius: pw.BorderRadius.circular(4),
-                        ),
-                        child: pw.Text(
-                          'Quotation Only - Not an Invoice',
-                          style: pw.TextStyle(
-                            fontSize: 9,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.teal,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 20),
-              pw.Divider(thickness: 2, color: PdfColors.teal),
-              pw.SizedBox(height: 16),
-
-              // Price List Info
-              pw.Container(
-                padding: const pw.EdgeInsets.all(12),
-                decoration: pw.BoxDecoration(
-                  color: PdfColors.grey100,
-                  borderRadius: pw.BorderRadius.circular(8),
-                ),
-                child: pw.Row(
+        margin: const pw.EdgeInsets.all(28),
+        header: (context) {
+          if (context.pageNumber > 1) {
+            return pw.Column(
+              children: [
+                pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text(
-                          priceList.title,
-                          style: pw.TextStyle(
-                            fontSize: 16,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                        pw.SizedBox(height: 4),
-                        if (priceList.customerName != null)
-                          pw.Text(
-                            'Client: ${priceList.customerName}',
-                            style: const pw.TextStyle(fontSize: 11),
-                          ),
-                      ],
+                    arText(
+                      'قائمة أسعار — ${priceList.title} — صفحة ${context.pageNumber}',
+                      fontSize: 9,
+                      color: PdfColors.grey600,
                     ),
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        _buildInfoRow('Date:', _formatDate(priceList.createdAt)),
-                        _buildInfoRow('Items:', '${items.length}'),
-                      ],
-                    ),
+                    arText(storeName, fontSize: 10, bold: true, color: brandDark),
                   ],
                 ),
-              ),
-              pw.SizedBox(height: 20),
-
-              // Items Table
-              pw.Table(
-                border: pw.TableBorder.all(color: PdfColors.grey300),
-                columnWidths: {
-                  0: const pw.FixedColumnWidth(35),
-                  1: const pw.FlexColumnWidth(4),
-                  2: const pw.FlexColumnWidth(1),
-                  3: const pw.FlexColumnWidth(1.5),
-                  4: const pw.FlexColumnWidth(1.5),
-                },
-                children: [
-                  pw.TableRow(
-                    decoration: const pw.BoxDecoration(color: PdfColors.teal),
-                    children: [
-                      _tableHeader('#'),
-                      _tableHeader('Product'),
-                      _tableHeader('Qty'),
-                      _tableHeader('Unit Price'),
-                      _tableHeader('Total'),
-                    ],
-                  ),
-                  ...items.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final item = entry.value;
-                    return pw.TableRow(
-                      decoration: pw.BoxDecoration(
-                        color: index.isEven ? PdfColors.white : PdfColors.grey50,
-                      ),
-                      children: [
-                        _tableCell('${index + 1}', center: true),
-                        _tableCell(item.productName),
-                        _tableCell('${item.quantity}', center: true),
-                        _tableCell('\$$currency ${item.unitPrice.toStringAsFixed(2)}', right: true),
-                        _tableCell('\$$currency ${item.totalPrice.toStringAsFixed(2)}', right: true),
-                      ],
-                    );
-                  }),
-                ],
-              ),
-              pw.SizedBox(height: 16),
-
-              // Total
-              pw.Container(
-                alignment: pw.Alignment.centerRight,
-                child: pw.Container(
-                  width: 220,
-                  padding: const pw.EdgeInsets.all(12),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.teal, width: 2),
-                    borderRadius: pw.BorderRadius.circular(4),
-                    color: PdfColors.teal50,
-                  ),
-                  child: _buildTotalRow(
-                    'TOTAL:',
-                    '\$$currency ${totalAmount.toStringAsFixed(2)}',
-                    bold: true,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-
-              // Notes
-              if (priceList.notes != null && priceList.notes!.isNotEmpty) ...[
-                pw.SizedBox(height: 20),
-                pw.Text(
-                  'Notes:',
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                ),
-                pw.SizedBox(height: 4),
-                pw.Container(
-                  padding: const pw.EdgeInsets.all(8),
-                  decoration: pw.BoxDecoration(
-                    color: PdfColors.orange50,
-                    borderRadius: pw.BorderRadius.circular(4),
-                  ),
-                  child: pw.Text(
-                    priceList.notes!,
-                    style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
-                  ),
-                ),
+                pw.SizedBox(height: 6),
+                pw.Container(width: double.infinity, height: 1, color: brandPrimary),
+                pw.SizedBox(height: 10),
               ],
-
-              // Footer
-              pw.Spacer(),
-              pw.Divider(color: PdfColors.grey300),
+            );
+          }
+          return pw.SizedBox.shrink();
+        },
+        footer: (context) {
+          return pw.Column(
+            children: [
+              pw.SizedBox(height: 8),
+              pw.Container(width: double.infinity, height: 0.5, color: PdfColors.grey300),
               pw.SizedBox(height: 8),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text(
-                    'This is a price quotation only and does not constitute a sale or invoice.',
-                    style: pw.TextStyle(
-                      fontStyle: pw.FontStyle.italic,
-                      color: PdfColors.grey500,
-                      fontSize: 9,
-                    ),
+                  arText(
+                    'صفحة ${context.pageNumber} من ${context.pagesCount}',
+                    fontSize: 8,
+                    color: PdfColors.grey500,
                   ),
-                  pw.Text(
-                    'Generated: ${_formatDate(DateTime.now())}',
-                    style: const pw.TextStyle(
-                      color: PdfColors.grey500,
-                      fontSize: 9,
-                    ),
+                  arText(
+                    'عرض أسعار فقط — لا يُعد فاتورة أو عملية بيع',
+                    fontSize: 8,
+                    color: PdfColors.grey500,
+                  ),
+                  arText(
+                    'تاريخ الطباعة: ${_formatDate(DateTime.now())}',
+                    fontSize: 8,
+                    color: PdfColors.grey500,
                   ),
                 ],
               ),
             ],
           );
         },
+        build: (context) {
+          return [
+            pw.Container(
+              width: double.infinity,
+              height: 6,
+              decoration: const pw.BoxDecoration(
+                color: brandPrimary,
+                borderRadius: pw.BorderRadius.all(pw.Radius.circular(3)),
+              ),
+            ),
+            pw.SizedBox(height: 16),
+
+            // Header: store + title
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      arText(storeName, fontSize: 22, bold: true, color: brandDark),
+                      pw.SizedBox(height: 2),
+                      _buildAccentBar(width: 50, height: 2, color: brandAmber),
+                      pw.SizedBox(height: 6),
+                      if (storeAddress.isNotEmpty)
+                        arText(storeAddress, fontSize: 10, color: PdfColors.grey700),
+                      if (storePhone.isNotEmpty)
+                        arText('هاتف: $storePhone', fontSize: 10, color: PdfColors.grey700),
+                      if (storeEmail.isNotEmpty)
+                        arText('بريد: $storeEmail', fontSize: 10, color: PdfColors.grey700),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(width: 12),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      decoration: pw.BoxDecoration(
+                        color: brandPrimary,
+                        borderRadius: pw.BorderRadius.circular(4),
+                      ),
+                      child: arText(
+                        'قائمة أسعار',
+                        fontSize: 18,
+                        bold: true,
+                        color: PdfColors.white,
+                        align: pw.TextAlign.center,
+                      ),
+                    ),
+                    pw.SizedBox(height: 8),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: pw.BoxDecoration(
+                        color: brandLight,
+                        borderRadius: pw.BorderRadius.circular(4),
+                        border: pw.Border.all(color: brandPrimary, width: 0.5),
+                      ),
+                      child: arText(
+                        'عرض أسعار فقط — ليست فاتورة',
+                        fontSize: 9,
+                        bold: true,
+                        color: brandDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 16),
+            pw.Container(width: double.infinity, height: 1.5, color: brandPrimary),
+            pw.SizedBox(height: 14),
+
+            // Price list info card
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                color: brandLight,
+                borderRadius: pw.BorderRadius.circular(8),
+                border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        arText(priceList.title, fontSize: 16, bold: true, color: brandDark),
+                        if (priceList.customerName != null &&
+                            priceList.customerName!.isNotEmpty) ...[
+                          pw.SizedBox(height: 4),
+                          arText(
+                            'العميل: ${priceList.customerName}',
+                            fontSize: 11,
+                            color: PdfColors.grey800,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      arText(
+                        'التاريخ: ${_formatDate(priceList.createdAt)}',
+                        fontSize: 10,
+                        color: PdfColors.grey700,
+                      ),
+                      pw.SizedBox(height: 4),
+                      arText(
+                        'عدد الأصناف: ${items.length}',
+                        fontSize: 10,
+                        color: PdfColors.grey700,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 16),
+
+            // Items table (RTL column order like invoices)
+            if (items.isEmpty)
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.all(16),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: arText(
+                  'لا توجد أصناف في قائمة الأسعار',
+                  fontSize: 12,
+                  color: PdfColors.grey700,
+                  align: pw.TextAlign.center,
+                ),
+              )
+            else
+              pw.TableHelper.fromTextArray(
+                border: pw.TableBorder(
+                  left: const pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  right: const pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  bottom: const pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  top: const pw.BorderSide(color: brandPrimary, width: 1.5),
+                  horizontalInside:
+                      const pw.BorderSide(color: PdfColors.grey200, width: 0.5),
+                  verticalInside:
+                      const pw.BorderSide(color: PdfColors.grey200, width: 0.5),
+                ),
+                headerDecoration: const pw.BoxDecoration(color: brandPrimary),
+                headerStyle: _baseStyle(
+                  bold: true,
+                  fontSize: 11,
+                  color: PdfColors.white,
+                ),
+                headerAlignment: pw.Alignment.center,
+                cellAlignment: pw.Alignment.centerRight,
+                cellPadding:
+                    const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                cellStyle: _baseStyle(fontSize: 10),
+                oddRowDecoration:
+                    const pw.BoxDecoration(color: PdfColor.fromInt(0xFFFAFAFA)),
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(1.5),
+                  1: const pw.FlexColumnWidth(1.5),
+                  2: const pw.FlexColumnWidth(1),
+                  3: const pw.FlexColumnWidth(0.5),
+                  4: const pw.FlexColumnWidth(3),
+                },
+                headers: ['الإجمالي', 'سعر الوحدة', 'الكمية', '#', 'المنتج'],
+                data: items.asMap().entries.map((entry) {
+                  final idx = entry.key + 1;
+                  final item = entry.value;
+                  final name = item.notes != null && item.notes!.isNotEmpty
+                      ? '${item.productName}\n${item.notes}'
+                      : item.productName;
+                  return [
+                    '$currency${item.totalPrice.toStringAsFixed(2)}',
+                    '$currency${item.unitPrice.toStringAsFixed(2)}',
+                    '${item.quantity}',
+                    '$idx',
+                    name,
+                  ];
+                }).toList(),
+              ),
+
+            pw.SizedBox(height: 16),
+
+            // Total
+            pw.Align(
+              alignment: pw.Alignment.centerLeft,
+              child: pw.Container(
+                width: 240,
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: brandLight,
+                  border: pw.Border.all(color: brandPrimary, width: 1.5),
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    arText('الإجمالي:', fontSize: 14, bold: true, color: brandDark),
+                    arText(
+                      '$currency${totalAmount.toStringAsFixed(2)}',
+                      fontSize: 14,
+                      bold: true,
+                      color: brandDark,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Notes
+            if (priceList.notes != null && priceList.notes!.isNotEmpty) ...[
+              pw.SizedBox(height: 16),
+              arText('ملاحظات:', fontSize: 11, bold: true, color: brandDark),
+              pw.SizedBox(height: 4),
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  color: const PdfColor.fromInt(0xFFFFF8E1),
+                  borderRadius: pw.BorderRadius.circular(6),
+                  border: pw.Border.all(color: PdfColors.orange, width: 0.5),
+                ),
+                child: arText(
+                  priceList.notes!,
+                  fontSize: 10,
+                  color: PdfColors.grey800,
+                ),
+              ),
+            ],
+          ];
+        },
       ),
     );
 
     return pdf;
+  }
+
+  Future<String> saveCustomerLedgerPdf({
+    required CustomerLedger ledger,
+    Map<String, dynamic>? storeSettings,
+    String? customPath,
+    List<CustomerLedgerEntry>? entriesOverride,
+    bool isPartialSelection = false,
+  }) async {
+    await _loadArabicFont();
+    final pdf = await buildCustomerLedgerPdf(
+      ledger,
+      storeSettings,
+      entriesOverride: entriesOverride,
+      isPartialSelection: isPartialSelection,
+    );
+
+    final directory = customPath ?? (await getApplicationDocumentsDirectory()).path;
+    final statementsDir = Directory('$directory/CustomerStatements');
+    if (!await statementsDir.exists()) {
+      await statementsDir.create(recursive: true);
+    }
+
+    final safeName = _safeFileName(ledger.customer.name, fallback: 'customer');
+    final fileName =
+        'Ledger_${safeName}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+    final filePath = '${statementsDir.path}${Platform.pathSeparator}$fileName';
+    await File(filePath).writeAsBytes(await pdf.save());
+    return filePath;
+  }
+
+  Future<pw.Document> buildCustomerLedgerPdf(
+    CustomerLedger ledger,
+    Map<String, dynamic>? storeSettings, {
+    List<CustomerLedgerEntry>? entriesOverride,
+    bool isPartialSelection = false,
+  }) async {
+    await _loadArabicFont();
+    final pdf = pw.Document(theme: _buildTheme());
+
+    const brandPrimary = PdfColor.fromInt(0xFF1565C0);
+    const brandDark = PdfColor.fromInt(0xFF0D47A1);
+    const brandLight = PdfColor.fromInt(0xFFE3F2FD);
+    const brandAmber = PdfColor.fromInt(0xFFFFC107);
+    const debitColor = PdfColor.fromInt(0xFFC62828);
+    const creditColor = PdfColor.fromInt(0xFF2E7D32);
+
+    final storeName = storeSettings?['store_name'] ?? 'المحل الكهربائي';
+    final storeAddress = storeSettings?['address'] ?? '';
+    final storePhone = storeSettings?['phone'] ?? '';
+    final storeEmail = storeSettings?['email'] ?? '';
+    final currency = storeSettings?['currency_symbol'] ?? '₪';
+
+    final entries = entriesOverride ?? ledger.entries;
+    final totalDebit = entries.fold<double>(0, (s, e) => s + e.debit);
+    final totalCredit = entries.fold<double>(0, (s, e) => s + e.credit);
+    final finalBalance =
+        entries.isNotEmpty ? entries.last.runningBalance : ledger.finalBalance;
+
+    String typeLabelAr(LedgerDocumentType type) {
+      switch (type) {
+        case LedgerDocumentType.openingBalance:
+          return 'رصيد مدور';
+        case LedgerDocumentType.salesInvoice:
+          return 'مبيعات';
+        case LedgerDocumentType.paymentReceipt:
+          return 'سند قبض';
+        case LedgerDocumentType.salesReturn:
+          return 'مرتجع';
+        case LedgerDocumentType.manualAdjustment:
+          return 'تسوية';
+        case LedgerDocumentType.accountDiscount:
+          return 'خصم';
+      }
+    }
+
+    pw.Widget arText(
+      String text, {
+      double fontSize = 10,
+      bool bold = false,
+      PdfColor? color,
+      pw.TextAlign align = pw.TextAlign.right,
+    }) {
+      return pw.Text(
+        text,
+        textDirection: pw.TextDirection.rtl,
+        textAlign: align,
+        style: _baseStyle(bold: bold, fontSize: fontSize, color: color),
+      );
+    }
+
+    pw.Widget ledgerHeaderCell(String text, {PdfColor? bg}) {
+      return pw.Container(
+        color: bg ?? brandDark,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        child: arText(text, bold: true, fontSize: 9, color: PdfColors.white, align: pw.TextAlign.center),
+      );
+    }
+
+    pw.Widget ledgerDataCell(
+      String text, {
+      PdfColor? bg,
+      bool bold = false,
+      PdfColor? color,
+      pw.TextAlign align = pw.TextAlign.center,
+    }) {
+      return pw.Container(
+        color: bg,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        child: arText(text, fontSize: 9, bold: bold, color: color, align: align),
+      );
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        textDirection: pw.TextDirection.rtl,
+        margin: const pw.EdgeInsets.all(24),
+        header: (context) {
+          if (context.pageNumber > 1) {
+            return pw.Container(
+              margin: const pw.EdgeInsets.only(bottom: 8),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  arText('كشف حساب — ${ledger.customer.name}', fontSize: 9, color: PdfColors.grey600),
+                  arText('صفحة ${context.pageNumber}', fontSize: 9, color: PdfColors.grey600),
+                ],
+              ),
+            );
+          }
+          return pw.SizedBox.shrink();
+        },
+        footer: (context) => pw.Container(
+          margin: const pw.EdgeInsets.only(top: 8),
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              arText('صفحة ${context.pageNumber} / ${context.pagesCount}', fontSize: 8, color: PdfColors.grey500),
+              arText('تاريخ الطباعة: ${_formatLedgerDate(DateTime.now())}', fontSize: 8, color: PdfColors.grey500),
+            ],
+          ),
+        ),
+        build: (context) {
+          return [
+            pw.Container(
+              width: double.infinity,
+              height: 5,
+              decoration: const pw.BoxDecoration(
+                color: brandPrimary,
+                borderRadius: pw.BorderRadius.all(pw.Radius.circular(2)),
+              ),
+            ),
+            pw.SizedBox(height: 14),
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                _buildStoreBrandingBlock(
+                  storeName: storeName,
+                  storeAddress: storeAddress,
+                  storePhone: storePhone,
+                  storeEmail: storeEmail,
+                  brandPrimary: brandPrimary,
+                  brandDark: brandDark,
+                  brandAmber: brandAmber,
+                ),
+                pw.Spacer(),
+                _buildDocumentTitleBadge('كشف حساب', brandPrimary: brandPrimary),
+              ],
+            ),
+            pw.SizedBox(height: 14),
+            pw.Row(
+              children: [
+                pw.Expanded(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.all(12),
+                    decoration: pw.BoxDecoration(
+                      color: brandLight,
+                      borderRadius: pw.BorderRadius.circular(6),
+                      border: pw.Border.all(color: brandPrimary, width: 0.5),
+                    ),
+                    child: _buildCustomerDataBranding(
+                      customerName: ledger.customer.name,
+                      customerCode: ledger.customerCode,
+                      phone: ledger.customer.phone,
+                      address: ledger.customer.address,
+                      brandPrimary: brandPrimary,
+                      brandDark: brandDark,
+                      brandAmber: brandAmber,
+                    ),
+                  ),
+                ),
+                pw.SizedBox(width: 10),
+                pw.Expanded(
+                  child: pw.Container(
+                    padding: const pw.EdgeInsets.all(12),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColors.white,
+                      borderRadius: pw.BorderRadius.circular(6),
+                      border: pw.Border.all(color: brandPrimary, width: 0.5),
+                    ),
+                    child: _buildBalanceSummaryBranding(
+                      currency: currency,
+                      totalSales: ledger.totalSales,
+                      totalPayments: ledger.totalPayments,
+                      currentBalance: ledger.currentBalance,
+                      brandPrimary: brandPrimary,
+                      brandDark: brandDark,
+                      brandAmber: brandAmber,
+                      debitColor: debitColor,
+                      creditColor: creditColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (ledger.filters.fromDate != null || ledger.filters.toDate != null || isPartialSelection) ...[
+              pw.SizedBox(height: 8),
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: pw.BoxDecoration(
+                  color: brandAmber,
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: arText(
+                  isPartialSelection
+                      ? 'تقرير جزئي — ${entries.length} حركة محددة'
+                      : 'الفترة: ${ledger.filters.fromDate != null ? _formatLedgerDate(ledger.filters.fromDate!) : '...'} — ${ledger.filters.toDate != null ? _formatLedgerDate(ledger.filters.toDate!) : '...'}',
+                  fontSize: 9,
+                  bold: true,
+                  color: brandDark,
+                  align: pw.TextAlign.center,
+                ),
+              ),
+            ],
+            pw.SizedBox(height: 12),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(1.3),
+                1: const pw.FlexColumnWidth(1.1),
+                2: const pw.FlexColumnWidth(1),
+                3: const pw.FlexColumnWidth(1),
+                4: const pw.FlexColumnWidth(1),
+                5: const pw.FlexColumnWidth(1.2),
+                6: const pw.FlexColumnWidth(1.1),
+                7: const pw.FixedColumnWidth(22),
+              },
+              children: [
+                pw.TableRow(
+                  children: [
+                    ledgerHeaderCell('ملاحظات'),
+                    ledgerHeaderCell('الرصيد'),
+                    ledgerHeaderCell('دائن'),
+                    ledgerHeaderCell('مدين'),
+                    ledgerHeaderCell('النوع'),
+                    ledgerHeaderCell('رقم المستند'),
+                    ledgerHeaderCell('التاريخ'),
+                    ledgerHeaderCell('#'),
+                  ],
+                ),
+                ...entries.asMap().entries.expand((mapEntry) {
+                  final i = mapEntry.key;
+                  final e = mapEntry.value;
+                  final rowBg = i.isEven ? PdfColors.white : PdfColors.grey50;
+                  final rows = <pw.TableRow>[
+                    pw.TableRow(
+                      children: [
+                        ledgerDataCell(e.notes ?? '', bg: rowBg, align: pw.TextAlign.right),
+                        ledgerDataCell(
+                          '$currency ${e.runningBalance.toStringAsFixed(2)}',
+                          bg: rowBg,
+                          bold: true,
+                        ),
+                        ledgerDataCell(
+                          e.credit > 0 ? '$currency ${e.credit.toStringAsFixed(2)}' : '—',
+                          bg: rowBg,
+                          color: e.credit > 0 ? creditColor : null,
+                          bold: e.credit > 0,
+                        ),
+                        ledgerDataCell(
+                          e.debit > 0 ? '$currency ${e.debit.toStringAsFixed(2)}' : '—',
+                          bg: rowBg,
+                          color: e.debit > 0 ? debitColor : null,
+                          bold: e.debit > 0,
+                        ),
+                        ledgerDataCell(typeLabelAr(e.documentType), bg: rowBg),
+                        ledgerDataCell(e.documentNumber, bg: rowBg),
+                        ledgerDataCell(_formatLedgerDate(e.date), bg: rowBg),
+                        ledgerDataCell('${i + 1}', bg: rowBg),
+                      ],
+                    ),
+                  ];
+
+                  if (e.isSalesInvoice) {
+                    final items = e.lineItems ?? (e.invoiceId != null ? ledger.invoiceItems[e.invoiceId] : null) ?? [];
+                    if (items.isNotEmpty) {
+                      rows.add(pw.TableRow(
+                        decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFE8EAF6)),
+                        children: [
+                          ledgerHeaderCell('', bg: PdfColor.fromInt(0xFF3949AB)),
+                          ledgerHeaderCell('', bg: PdfColor.fromInt(0xFF3949AB)),
+                          ledgerHeaderCell('المبلغ', bg: PdfColor.fromInt(0xFF3949AB)),
+                          ledgerHeaderCell('السعر', bg: PdfColor.fromInt(0xFF3949AB)),
+                          ledgerHeaderCell('الكمية', bg: PdfColor.fromInt(0xFF3949AB)),
+                          ledgerHeaderCell('اسم الصنف', bg: PdfColor.fromInt(0xFF3949AB)),
+                          ledgerHeaderCell('الباركود', bg: PdfColor.fromInt(0xFF3949AB)),
+                          ledgerHeaderCell('', bg: PdfColor.fromInt(0xFF3949AB)),
+                        ],
+                      ));
+                      for (final item in items) {
+                        rows.add(pw.TableRow(
+                          children: [
+                            ledgerDataCell('', bg: PdfColors.grey100),
+                            ledgerDataCell('', bg: PdfColors.grey100),
+                            ledgerDataCell('$currency ${item.totalAmount.toStringAsFixed(2)}', bg: PdfColors.grey100, bold: true),
+                            ledgerDataCell('$currency ${item.salePrice.toStringAsFixed(2)}', bg: PdfColors.grey100),
+                            ledgerDataCell('${item.quantity}', bg: PdfColors.grey100),
+                            ledgerDataCell(item.productName, bg: PdfColors.grey100, align: pw.TextAlign.right),
+                            ledgerDataCell(item.barcode ?? '—', bg: PdfColors.grey100),
+                            ledgerDataCell('', bg: PdfColors.grey100),
+                          ],
+                        ));
+                      }
+                    }
+                  }
+                  return rows;
+                }),
+              ],
+            ),
+            pw.SizedBox(height: 14),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                color: brandLight,
+                borderRadius: pw.BorderRadius.circular(6),
+                border: pw.Border.all(color: brandPrimary, width: 0.8),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  arText(
+                    'الرصيد الصافي: $currency ${finalBalance.toStringAsFixed(2)}',
+                    fontSize: 12,
+                    bold: true,
+                    color: finalBalance > 0 ? debitColor : (finalBalance < 0 ? creditColor : brandDark),
+                  ),
+                  arText(
+                    'إجمالي الدائن: $currency ${totalCredit.toStringAsFixed(2)}',
+                    fontSize: 11,
+                    bold: true,
+                    color: creditColor,
+                  ),
+                  arText(
+                    'إجمالي المدين: $currency ${totalDebit.toStringAsFixed(2)}',
+                    fontSize: 11,
+                    bold: true,
+                    color: debitColor,
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 10),
+            pw.Container(
+              width: double.infinity,
+              height: 3,
+              decoration: const pw.BoxDecoration(
+                color: brandPrimary,
+                borderRadius: pw.BorderRadius.all(pw.Radius.circular(2)),
+              ),
+            ),
+          ];
+        },
+      ),
+    );
+
+    return pdf;
+  }
+
+  String _formatLedgerDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  pw.Widget _buildInfoRowAr(String label, String value) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 2),
+      child: pw.SizedBox(
+        width: double.infinity,
+        child: pw.RichText(
+          textDirection: pw.TextDirection.rtl,
+          textAlign: pw.TextAlign.right,
+          text: pw.TextSpan(
+            children: [
+              pw.TextSpan(
+                text: label,
+                style: _baseStyle(fontSize: 9, color: PdfColors.grey700),
+              ),
+              pw.TextSpan(
+                text: ' $value',
+                style: _baseStyle(fontSize: 9, bold: true),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
