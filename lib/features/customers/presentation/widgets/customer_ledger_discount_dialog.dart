@@ -151,7 +151,11 @@ class _CustomerLedgerDiscountDialogState extends State<CustomerLedgerDiscountDia
                 ),
                 validator: (value) {
                   final amount = double.tryParse(value?.trim() ?? '') ?? 0;
-                  if (amount <= 0) return _loc.get('amountRequired');
+                  // Invoice discount can be cleared to 0 when editing an existing discount.
+                  final allowZero = isInvoice && widget.currentDiscount > 0;
+                  if (amount < 0 || (!allowZero && amount <= 0)) {
+                    return _loc.get('amountRequired');
+                  }
                   if (isInvoice && amount > widget.referenceAmount) {
                     return _loc.get('discountExceedsTotal');
                   }
@@ -178,6 +182,12 @@ class _CustomerLedgerDiscountDialogState extends State<CustomerLedgerDiscountDia
           onPressed: () => Navigator.pop(context),
           child: Text(_loc.get('cancel')),
         ),
+        if (isInvoice && widget.currentDiscount > 0)
+          TextButton(
+            onPressed: () => Navigator.pop(context, {'amount': 0.0, 'notes': ''}),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: Text(_loc.get('removeDiscount')),
+          ),
         ElevatedButton(
           onPressed: _submit,
           style: ElevatedButton.styleFrom(

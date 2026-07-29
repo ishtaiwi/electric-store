@@ -405,9 +405,10 @@ class _CustomerAccountStatementPageState
     if (result == null || !mounted) return;
 
     try {
+      final amount = result['amount'] as double;
       await di.sl<InvoiceRepository>().updateInvoiceDiscount(
             entry.invoiceId!,
-            result['amount'] as double,
+            amount,
           );
       if ((result['notes'] as String?)?.isNotEmpty == true) {
         await di.sl<InvoiceRepository>().updateInvoiceNotes(
@@ -419,7 +420,12 @@ class _CustomerAccountStatementPageState
       context.read<CustomerBloc>().add(CustomerRefresh());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_localization.get('discountApplied')), backgroundColor: AppColors.success),
+          SnackBar(
+            content: Text(_localization.get(
+              amount > 0 ? 'discountApplied' : 'discountRemoved',
+            )),
+            backgroundColor: AppColors.success,
+          ),
         );
         _loadLedger();
       }
@@ -604,12 +610,14 @@ class _CustomerAccountStatementPageState
     );
   }
 
-  void _confirmDeletePayment(int paymentId) {
+  void _confirmDeletePayment(int paymentId, {bool isDiscount = false}) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(_localization.get('confirmDelete')),
-        content: Text(_localization.get('deletePaymentConfirm')),
+        content: Text(_localization.get(
+          isDiscount ? 'deleteDiscountConfirm' : 'deletePaymentConfirm',
+        )),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_localization.get('cancel'))),
           ElevatedButton(
@@ -1247,8 +1255,8 @@ class _CustomerAccountStatementPageState
           case 'delete':
             if (entry.isSalesInvoice) {
               _confirmDeleteInvoice(entry.invoiceId!, entry.documentNumber);
-            } else if (entry.isPayment) {
-              _confirmDeletePayment(entry.paymentId!);
+            } else if (entry.isPayment || entry.isDiscount) {
+              _confirmDeletePayment(entry.paymentId!, isDiscount: entry.isDiscount);
             }
             break;
         }
