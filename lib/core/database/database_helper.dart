@@ -3,10 +3,19 @@ import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 
+import 'sync_tracking_database.dart';
+
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
   static Database? _database;
-  
+  static Database? _trackedDatabase;
+
+  /// Called after any local data write (debounced push to Supabase).
+  void Function()? onDataChanged;
+
+  /// When > 0, write notifications are suppressed (avoid sync feedback loops).
+  int _syncSilence = 0;
+
   /// Custom database path - set this before accessing the database
   /// to use an existing database file
   static String? customDbPath;
@@ -19,10 +28,27 @@ class DatabaseHelper {
 
   DatabaseHelper._internal();
 
+  bool get shouldNotifySync => _syncSilence == 0;
+
+  /// Run [action] without triggering automatic cloud upload.
+  Future<T> withoutSyncNotify<T>(Future<T> Function() action) async {
+    _syncSilence++;
+    try {
+      return await action();
+    } finally {
+      _syncSilence--;
+    }
+  }
+
   Future<Database> get database async {
-    if (_database != null) return _database!;
+    if (_trackedDatabase != null) return _trackedDatabase!;
     _database = await _initDatabase();
-    return _database!;
+    _trackedDatabase = SyncTrackingDatabase(
+      _database!,
+      () => onDataChanged?.call(),
+      shouldNotify: () => shouldNotifySync,
+    );
+    return _trackedDatabase!;
   }
 
   Future<Database> _initDatabase() async {
@@ -704,35 +730,46 @@ class DatabaseHelper {
   }
 
   Future<void> close() async {
-    final db = await database;
-    await db.close();
+    if (_trackedDatabase != null) {
+      await _trackedDatabase!.close();
+    } else if (_database != null) {
+      await _database!.close();
+    }
     _database = null;
+    _trackedDatabase = null;
   }
 
   Future<void> resetDatabase() async {
     final path = await getDatabasePath();
     await close();
     await deleteDatabase(path);
-    _database = await _initDatabase();
+    _database = null;
+    _trackedDatabase = null;
   }
   
   /// Switch to test database mode
   /// Call this before accessing the database for the first time
   static Future<void> switchToTestDatabase() async {
-    if (_database != null) {
+    if (_trackedDatabase != null) {
+      await _trackedDatabase!.close();
+    } else if (_database != null) {
       await _database!.close();
-      _database = null;
     }
+    _database = null;
+    _trackedDatabase = null;
     useTestDatabase = true;
   }
   
   /// Switch to production database mode
   /// Call this before accessing the database for the first time
   static Future<void> switchToProductionDatabase() async {
-    if (_database != null) {
+    if (_trackedDatabase != null) {
+      await _trackedDatabase!.close();
+    } else if (_database != null) {
       await _database!.close();
-      _database = null;
     }
+    _database = null;
+    _trackedDatabase = null;
     useTestDatabase = false;
   }
   

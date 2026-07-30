@@ -400,6 +400,32 @@ class LocalizationService extends ChangeNotifier {
     'settingsSaved': 'Settings saved successfully',
     'errorLoadingSettings': 'Error loading settings:',
     'errorSavingSettings': 'Error saving settings:',
+
+    // Supabase sync
+    'supabaseSync': 'Supabase Cloud Sync',
+    'supabaseSyncDesc':
+        'Desktop is the source of truth. Changes upload to the cloud automatically. Connection keys are private (not shown here).',
+    'supabaseUrl': 'Supabase Project URL',
+    'supabaseAnonKey': 'Supabase Anon Key',
+    'enableSupabaseSync': 'Enable automatic cloud upload',
+    'autoSyncOnStartup': 'Upload also on app startup',
+    'autoSyncOnStartupDesc':
+        'Uploads desktop data when the app opens (requires internet)',
+    'lastSync': 'Last upload',
+    'saveSupabaseSettings': 'Save sync options',
+    'testConnection': 'Test connection',
+    'syncNow': 'Upload now',
+    'uploadToCloud': 'Upload now',
+    'downloadFromCloud': 'Restore from cloud',
+    'restoreFromCloudTitle': 'Restore from cloud?',
+    'restoreFromCloudWarning':
+        'This will REPLACE local desktop data with Supabase. Only use if you need to recover this PC. Desktop should normally stay the source of truth.',
+    'supabaseSettingsSaved': 'Sync options saved',
+    'supabaseInitFailed': 'Cloud connection failed (check local .env / secrets)',
+    'supabaseCredentialsRequired': 'Cloud keys are missing from local secrets',
+    'supabaseConnectionOk': 'Connected to cloud successfully',
+    'supabaseConnectionFailed': 'Could not connect to cloud',
+    'supabaseSyncFailed': 'Sync failed',
     
     // Backup
     'createBackup': 'Create Backup',
@@ -1083,6 +1109,32 @@ class LocalizationService extends ChangeNotifier {
     'settingsSaved': 'تم حفظ الإعدادات بنجاح',
     'errorLoadingSettings': 'خطأ في تحميل الإعدادات:',
     'errorSavingSettings': 'خطأ في حفظ الإعدادات:',
+
+    // Supabase sync
+    'supabaseSync': 'مزامنة سحابة Supabase',
+    'supabaseSyncDesc':
+        'الديسكتوب هو المصدر. التعديلات تنرفع للسحابة تلقائياً. مفاتيح الاتصال خاصة وغير ظاهرة هنا.',
+    'supabaseUrl': 'رابط مشروع Supabase',
+    'supabaseAnonKey': 'مفتاح Anon من Supabase',
+    'enableSupabaseSync': 'تفعيل الرفع التلقائي للسحابة',
+    'autoSyncOnStartup': 'رفع أيضاً عند فتح البرنامج',
+    'autoSyncOnStartupDesc':
+        'يرفع بيانات الديسكتوب عند فتح التطبيق (يحتاج إنترنت)',
+    'lastSync': 'آخر رفع',
+    'saveSupabaseSettings': 'حفظ خيارات المزامنة',
+    'testConnection': 'اختبار الاتصال',
+    'syncNow': 'رفع الآن',
+    'uploadToCloud': 'رفع الآن',
+    'downloadFromCloud': 'استعادة من السحابة',
+    'restoreFromCloudTitle': 'استعادة من السحابة؟',
+    'restoreFromCloudWarning':
+        'هذا سيستبدل بيانات الديسكتوب المحلية ببيانات السحابة. استخدمه فقط لاسترجاع الجهاز.',
+    'supabaseSettingsSaved': 'تم حفظ خيارات المزامنة',
+    'supabaseInitFailed': 'فشل الاتصال بالسحابة (تحقق من ملف .env المحلي)',
+    'supabaseCredentialsRequired': 'مفاتيح السحابة ناقصة من الأسرار المحلية',
+    'supabaseConnectionOk': 'تم الاتصال بالسحابة بنجاح',
+    'supabaseConnectionFailed': 'تعذر الاتصال بالسحابة',
+    'supabaseSyncFailed': 'فشلت المزامنة',
     
     // Backup
     'createBackup': 'إنشاء نسخة احتياطية',

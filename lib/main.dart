@@ -10,8 +10,10 @@ import 'package:flutter/foundation.dart';
 import 'core/di/injection_container.dart' as di;
 import 'core/theme/app_theme.dart';
 import 'core/services/localization_service.dart';
+import 'core/services/sync_service.dart';
 import 'core/database/database_helper.dart';
 import 'core/database/test_database_generator.dart';
+import 'core/supabase/supabase_client_service.dart';
 import 'core/utils/keyboard_error_handler.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/pages/login_page.dart';
@@ -58,6 +60,9 @@ void main() async {
     // Pre-warm database connection in background (don't await - let it happen while UI loads)
     _prewarmDatabase();
 
+    // Optional: auto-sync with Supabase after local DB is ready
+    _maybeAutoSync();
+
     runApp(const ElectricalStoreApp());
   }, (error, stackTrace) {
     // Global error handler — catches all uncaught async errors
@@ -73,6 +78,36 @@ void _prewarmDatabase() {
     debugPrint('Database connection pre-warmed');
   }).catchError((e) {
     debugPrint('Database prewarm error: $e');
+  });
+}
+
+/// Auto-upload: desktop is source of truth.
+/// Credentials are embedded from `.env` (gitignored); never entered in the UI.
+void _maybeAutoSync() {
+  Future(() async {
+    try {
+      final supabase = di.sl<SupabaseClientService>();
+      final sync = di.sl<SyncService>();
+
+      final ready = await supabase.initializeFromSettings();
+      if (!ready) {
+        debugPrint('Supabase secrets missing — run: python supabase/generate_secrets.py');
+        return;
+      }
+
+      await supabase.setSyncEnabled(true);
+      await supabase.setAutoSync(true);
+
+      sync.startPeriodicDesktopPush(
+        interval: const Duration(minutes: 5),
+      );
+
+      debugPrint('Auto-upload desktop → Supabase starting...');
+      final result = await sync.pushFromDesktop();
+      debugPrint('Auto-upload: ${result.message}');
+    } catch (e) {
+      debugPrint('Auto-sync skipped: $e');
+    }
   });
 }
 

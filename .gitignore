@@ -55,12 +55,43 @@ app.*.map.json
 *.sqlite3
 *.safety_backup
 
+# Supabase / secrets — NEVER commit real keys
+.env
+.env.*
+!.env.example
+**/.env
+supabase/.env
+supabase/data_export.sql
+lib/core/config/supabase_secrets.dart
+mobile/lib/core/config/supabase_secrets.dart
+**/supabase_secrets.dart
+!**/supabase_secrets.example.dart
+
 # Generated/test data
 generate_test_data.sql
 test_data.db
 
 # Windows build artifacts
 /windows/flutter/ephemeral/
+
+# Mobile / Android build artifacts — never commit
+mobile/build/
+mobile/**/build/
+mobile/.dart_tool/
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/.kotlin/
+mobile/**/*.apk
+mobile/**/*.aab
+mobile/**/*.ap_
+**/*.apk
+**/*.aab
+
+# Large installer binaries (optional local builds)
+installer_output/*.exe
+
+# Scratch / local notes
+supabase/Untitled
 
 # Metadata
 .metadata

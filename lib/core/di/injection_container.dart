@@ -8,6 +8,8 @@ import '../services/error_handler_service.dart';
 import '../services/validation_service.dart';
 import '../services/smart_search_service.dart';
 import '../services/chatbot_service.dart';
+import '../services/sync_service.dart';
+import '../supabase/supabase_client_service.dart';
 import '../../features/auth/data/repositories/auth_repository_impl.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
@@ -54,13 +56,24 @@ Future<void> init() async {
   sl.registerLazySingleton(() => ValidationService());
   sl.registerLazySingleton(() => PdfService());
 
+  // Supabase hybrid sync
+  sl.registerLazySingleton(() => SupabaseClientService(sl()));
+  sl.registerLazySingleton(() => SyncService(sl(), sl()));
+
+  // Any local DB write → automatic debounced upload to Supabase
+  final dbHelper = sl<DatabaseHelper>();
+  final syncService = sl<SyncService>();
+  dbHelper.onDataChanged = () {
+    syncService.scheduleDesktopPush();
+  };
+
   // AI Services - Smart Search and Chatbot
   sl.registerLazySingleton(() => SmartSearchService());
   sl.registerLazySingleton(() => ChatbotService());
 
   // Initialize audit logger with database
   final auditLogger = sl<AuditLoggerService>();
-  auditLogger.initialize(sl<DatabaseHelper>());
+  auditLogger.initialize(dbHelper);
 
   // Repositories
   sl.registerLazySingleton<AuthRepository>(() => AuthRepositoryImpl(sl()));

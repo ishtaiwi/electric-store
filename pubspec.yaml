@@ -21,6 +21,7 @@ dependencies:
   sqflite_common_ffi: ^2.3.0+4
   path: ^1.8.3
   path_provider: ^2.1.1
+  supabase_flutter: ^2.8.0
   
   # UI Components
   cupertino_icons: ^1.0.6

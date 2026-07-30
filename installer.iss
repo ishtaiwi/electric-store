@@ -51,11 +51,8 @@ Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescrip
 ; Main executable
 Source: "{#BuildDir}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
-; DLLs
-Source: "{#BuildDir}\flutter_windows.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#BuildDir}\pdfium.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#BuildDir}\printing_plugin.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#BuildDir}\sqlite3.dll"; DestDir: "{app}"; Flags: ignoreversion
+; All plugin / runtime DLLs (sqlite, flutter, supabase plugins, etc.)
+Source: "{#BuildDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Data folder (app.so, icudtl.dat, flutter_assets)
 Source: "{#BuildDir}\data\*"; DestDir: "{app}\data"; Flags: ignoreversion recursesubdirs createallsubdirs

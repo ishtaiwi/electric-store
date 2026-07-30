@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/services/localization_service.dart';
+import '../../../../core/services/sync_service.dart';
+import '../../../../core/supabase/supabase_client_service.dart';
 import '../../../settings/domain/repositories/settings_repository.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/domain/repositories/auth_repository.dart';
@@ -23,6 +27,10 @@ class _SettingsPageState extends State<SettingsPage> {
   final _currencyController = TextEditingController();
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _supabaseSyncEnabled = true;
+  bool _supabaseAutoSync = true;
+  bool _isSyncing = false;
+  String? _lastSyncAt;
   
   // User management state
   List<User> _users = [];
@@ -33,6 +41,7 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     _loadSettings();
     _loadUsers();
+    _loadSupabaseSettings();
   }
 
   @override
@@ -44,6 +53,144 @@ class _SettingsPageState extends State<SettingsPage> {
     _taxRateController.dispose();
     _currencyController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSupabaseSettings() async {
+    try {
+      final supabase = sl<SupabaseClientService>();
+      final enabled = await supabase.getSyncEnabled();
+      final auto = await supabase.getAutoSync();
+      final last = await supabase.getLastSyncAt();
+      if (!mounted) return;
+      setState(() {
+        _supabaseSyncEnabled = enabled;
+        _supabaseAutoSync = auto;
+        _lastSyncAt = last;
+      });
+    } catch (e) {
+      debugPrint('Error loading Supabase settings: $e');
+    }
+  }
+
+  Future<void> _saveSupabaseSettings() async {
+    final supabase = sl<SupabaseClientService>();
+
+    try {
+      if (_supabaseSyncEnabled && !_supabaseAutoSync) {
+        setState(() => _supabaseAutoSync = true);
+      }
+
+      await supabase.setSyncEnabled(_supabaseSyncEnabled);
+      await supabase.setAutoSync(_supabaseAutoSync);
+
+      final ok = await supabase.initializeFromSettings();
+      if (!ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(LocalizationService().get('supabaseInitFailed')),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+
+      final sync = sl<SyncService>();
+      if (_supabaseSyncEnabled) {
+        sync.startPeriodicDesktopPush();
+        unawaited(sync.pushFromDesktop());
+      } else {
+        sync.stopPeriodicDesktopPush();
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(LocalizationService().get('supabaseSettingsSaved')),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${LocalizationService().get('errorSavingSettings')} $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmPullFromCloud() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(LocalizationService().get('restoreFromCloudTitle')),
+        content: Text(LocalizationService().get('restoreFromCloudWarning')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(LocalizationService().get('cancel')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(LocalizationService().get('downloadFromCloud')),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await _runSync(SyncDirection.pull);
+    }
+  }
+
+  Future<void> _testSupabaseConnection() async {
+    final supabase = sl<SupabaseClientService>();
+    final ready = await supabase.initializeFromSettings();
+    final ok = ready && await supabase.testConnection();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? LocalizationService().get('supabaseConnectionOk')
+              : LocalizationService().get('supabaseConnectionFailed'),
+        ),
+        backgroundColor: ok ? AppColors.success : AppColors.error,
+      ),
+    );
+  }
+
+  Future<void> _runSync(SyncDirection direction) async {
+    setState(() => _isSyncing = true);
+    try {
+      await _saveSupabaseSettings();
+      final result = await sl<SyncService>().sync(direction: direction);
+      final last = await sl<SupabaseClientService>().getLastSyncAt();
+      if (!mounted) return;
+      setState(() => _lastSyncAt = last);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message),
+          backgroundColor: result.success ? AppColors.success : AppColors.error,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${LocalizationService().get('supabaseSyncFailed')}: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -590,6 +737,82 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                           const SizedBox(height: 24),
 
+                          // Supabase Sync Section
+                          _SectionCard(
+                            title: LocalizationService().get('supabaseSync'),
+                            icon: Icons.cloud_sync,
+                            children: [
+                              Text(
+                                LocalizationService().get('supabaseSyncDesc'),
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(LocalizationService().get('enableSupabaseSync')),
+                                value: _supabaseSyncEnabled,
+                                onChanged: (v) => setState(() => _supabaseSyncEnabled = v),
+                              ),
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(LocalizationService().get('autoSyncOnStartup')),
+                                subtitle: Text(
+                                  LocalizationService().get('autoSyncOnStartupDesc'),
+                                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                ),
+                                value: _supabaseAutoSync,
+                                onChanged: _supabaseSyncEnabled
+                                    ? (v) => setState(() => _supabaseAutoSync = v)
+                                    : null,
+                              ),
+                              if (_lastSyncAt != null && _lastSyncAt!.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${LocalizationService().get('lastSync')}: $_lastSyncAt',
+                                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                ),
+                              ],
+                              const SizedBox(height: 16),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: _isSyncing ? null : _saveSupabaseSettings,
+                                    icon: const Icon(Icons.save),
+                                    label: Text(LocalizationService().get('saveSupabaseSettings')),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: _isSyncing ? null : _testSupabaseConnection,
+                                    icon: const Icon(Icons.wifi_tethering),
+                                    label: Text(LocalizationService().get('testConnection')),
+                                  ),
+                                  ElevatedButton.icon(
+                                    onPressed: _isSyncing
+                                        ? null
+                                        : () => _runSync(SyncDirection.push),
+                                    icon: _isSyncing
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          )
+                                        : const Icon(Icons.cloud_upload),
+                                    label: Text(LocalizationService().get('syncNow')),
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: _isSyncing ? null : _confirmPullFromCloud,
+                                    icon: const Icon(Icons.cloud_download),
+                                    label: Text(LocalizationService().get('downloadFromCloud')),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+
                           // System Information
                           _SectionCard(
                             title: LocalizationService().get('systemInformation'),
@@ -597,7 +820,10 @@ class _SettingsPageState extends State<SettingsPage> {
                             children: [
                               _InfoRow(label: LocalizationService().get('appVersion'), value: '1.0.0'),
                               const Divider(height: 24),
-                              _InfoRow(label: LocalizationService().get('database'), value: 'd.db (SQLite)'),
+                              _InfoRow(
+                                label: LocalizationService().get('database'),
+                                value: 'SQLite + Supabase',
+                              ),
                               const Divider(height: 24),
                               _InfoRow(label: LocalizationService().get('platform'), value: LocalizationService().get('desktop')),
                             ],
