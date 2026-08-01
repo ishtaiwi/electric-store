@@ -40,9 +40,15 @@ class Product {
   final double price;
   final double costPrice;
   final String? note;
+  /// Brand / make (النوع)
+  final String? brand;
+  /// Product class (الصنف)
+  final String? category;
   final String? supplier;
   final int? supplierId;
   final int minStock;
+  /// Public Supabase Storage URL
+  final String? imageUrl;
   final DateTime? lastUpdated;
 
   const Product({
@@ -53,9 +59,12 @@ class Product {
     required this.price,
     required this.costPrice,
     this.note,
+    this.brand,
+    this.category,
     this.supplier,
     this.supplierId,
     this.minStock = 5,
+    this.imageUrl,
     this.lastUpdated,
   });
 
@@ -67,9 +76,12 @@ class Product {
         price: asDouble(map['price']),
         costPrice: asDouble(map['cost_price']),
         note: map['note'] as String?,
+        brand: map['brand'] as String?,
+        category: map['category'] as String?,
         supplier: map['supplier'] as String?,
         supplierId: asInt(map['supplier_id']),
         minStock: asInt(map['min_stock']) ?? 5,
+        imageUrl: map['image_url'] as String?,
         lastUpdated: asDate(map['last_updated']),
       );
 
@@ -81,14 +93,51 @@ class Product {
         'price': price,
         'cost_price': costPrice,
         'note': note,
+        'brand': brand,
+        'category': category,
         'supplier': supplier,
         'supplier_id': supplierId,
         'min_stock': minStock,
+        'image_url': imageUrl,
         'last_updated': DateTime.now().toIso8601String(),
       };
 
+  Product copyWith({
+    int? id,
+    String? name,
+    String? barcode,
+    int? quantity,
+    double? price,
+    double? costPrice,
+    String? note,
+    String? brand,
+    String? category,
+    String? supplier,
+    int? supplierId,
+    int? minStock,
+    String? imageUrl,
+    DateTime? lastUpdated,
+  }) =>
+      Product(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        barcode: barcode ?? this.barcode,
+        quantity: quantity ?? this.quantity,
+        price: price ?? this.price,
+        costPrice: costPrice ?? this.costPrice,
+        note: note ?? this.note,
+        brand: brand ?? this.brand,
+        category: category ?? this.category,
+        supplier: supplier ?? this.supplier,
+        supplierId: supplierId ?? this.supplierId,
+        minStock: minStock ?? this.minStock,
+        imageUrl: imageUrl ?? this.imageUrl,
+        lastUpdated: lastUpdated ?? this.lastUpdated,
+      );
+
   bool get isLowStock => quantity <= minStock;
   bool get isOutOfStock => quantity <= 0;
+  bool get hasImage => imageUrl != null && imageUrl!.trim().isNotEmpty;
 }
 
 class Customer {

@@ -101,6 +101,8 @@ class _EditInvoiceDialogState extends State<EditInvoiceDialog> {
             price: (map['price'] as num?)?.toDouble() ?? 0.0,
             costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0.0,
             note: map['note'] as String?,
+            brand: map['brand'] as String?,
+            category: map['category'] as String?,
             supplier: map['supplier'] as String?,
             minStock: (map['min_stock'] as int?) ?? 5,
             lastUpdated: map['last_updated'] != null

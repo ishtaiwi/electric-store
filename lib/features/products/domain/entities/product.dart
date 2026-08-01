@@ -8,9 +8,15 @@ class Product extends Equatable {
   final double price;
   final double costPrice;
   final String? note;
+  /// Brand / make (النوع) e.g. Lieber, Nesco, Givz
+  final String? brand;
+  /// Product class (الصنف) e.g. lamps, LED rope, outlets
+  final String? category;
   final String? supplier;
   final int? supplierId;
   final int minStock;
+  /// Public Supabase Storage URL for the product photo
+  final String? imageUrl;
   final DateTime? lastUpdated;
 
   const Product({
@@ -21,9 +27,12 @@ class Product extends Equatable {
     required this.price,
     required this.costPrice,
     this.note,
+    this.brand,
+    this.category,
     this.supplier,
     this.supplierId,
     this.minStock = 5,
+    this.imageUrl,
     this.lastUpdated,
   });
 
@@ -36,9 +45,12 @@ class Product extends Equatable {
       price: (map['price'] as num).toDouble(),
       costPrice: (map['cost_price'] as num? ?? 0).toDouble(),
       note: map['note'] as String?,
+      brand: map['brand'] as String?,
+      category: map['category'] as String?,
       supplier: map['supplier'] as String?,
       supplierId: map['supplier_id'] as int?,
       minStock: map['min_stock'] as int? ?? 5,
+      imageUrl: map['image_url'] as String?,
       lastUpdated: map['last_updated'] != null
           ? DateTime.parse(map['last_updated'] as String)
           : null,
@@ -54,9 +66,12 @@ class Product extends Equatable {
       'price': price,
       'cost_price': costPrice,
       'note': note,
+      'brand': brand,
+      'category': category,
       'supplier': supplier,
       'supplier_id': supplierId,
       'min_stock': minStock,
+      'image_url': imageUrl,
     };
   }
 
@@ -68,9 +83,12 @@ class Product extends Equatable {
     double? price,
     double? costPrice,
     String? note,
+    String? brand,
+    String? category,
     String? supplier,
     int? supplierId,
     int? minStock,
+    String? imageUrl,
     DateTime? lastUpdated,
   }) {
     return Product(
@@ -81,9 +99,12 @@ class Product extends Equatable {
       price: price ?? this.price,
       costPrice: costPrice ?? this.costPrice,
       note: note ?? this.note,
+      brand: brand ?? this.brand,
+      category: category ?? this.category,
       supplier: supplier ?? this.supplier,
       supplierId: supplierId ?? this.supplierId,
       minStock: minStock ?? this.minStock,
+      imageUrl: imageUrl ?? this.imageUrl,
       lastUpdated: lastUpdated ?? this.lastUpdated,
     );
   }
@@ -102,9 +123,12 @@ class Product extends Equatable {
         price,
         costPrice,
         note,
+        brand,
+        category,
         supplier,
         supplierId,
         minStock,
+        imageUrl,
         lastUpdated,
       ];
 }

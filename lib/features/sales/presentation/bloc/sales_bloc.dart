@@ -25,11 +25,13 @@ class SalesLoadMoreProducts extends SalesEvent {}
 
 class SalesSearchProducts extends SalesEvent {
   final String query;
+  final String? brand;
+  final String? category;
 
-  const SalesSearchProducts(this.query);
+  const SalesSearchProducts(this.query, {this.brand, this.category});
 
   @override
-  List<Object?> get props => [query];
+  List<Object?> get props => [query, brand, category];
 }
 
 class SalesAddToCart extends SalesEvent {
@@ -160,6 +162,8 @@ class SalesReady extends SalesState {
   final bool hasMore;
   final bool isLoadingMore;
   final String currentSearchQuery;
+  final String? brandFilter;
+  final String? categoryFilter;
 
   const SalesReady({
     this.products = const [],
@@ -171,6 +175,8 @@ class SalesReady extends SalesState {
     this.hasMore = true,
     this.isLoadingMore = false,
     this.currentSearchQuery = '',
+    this.brandFilter,
+    this.categoryFilter,
   });
 
   double get subtotal => cart.fold(0.0, (sum, item) => sum + item.totalPrice);
@@ -189,6 +195,10 @@ class SalesReady extends SalesState {
     bool? hasMore,
     bool? isLoadingMore,
     String? currentSearchQuery,
+    String? brandFilter,
+    String? categoryFilter,
+    bool clearBrandFilter = false,
+    bool clearCategoryFilter = false,
   }) {
     return SalesReady(
       products: products ?? this.products,
@@ -200,11 +210,25 @@ class SalesReady extends SalesState {
       hasMore: hasMore ?? this.hasMore,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       currentSearchQuery: currentSearchQuery ?? this.currentSearchQuery,
+      brandFilter: clearBrandFilter ? null : (brandFilter ?? this.brandFilter),
+      categoryFilter: clearCategoryFilter ? null : (categoryFilter ?? this.categoryFilter),
     );
   }
 
   @override
-  List<Object?> get props => [products, cart, discount, customerId, paymentMethod, todayInvoices, hasMore, isLoadingMore, currentSearchQuery];
+  List<Object?> get props => [
+        products,
+        cart,
+        discount,
+        customerId,
+        paymentMethod,
+        todayInvoices,
+        hasMore,
+        isLoadingMore,
+        currentSearchQuery,
+        brandFilter,
+        categoryFilter,
+      ];
 }
 
 class SalesCheckoutSuccess extends SalesState {
@@ -230,7 +254,7 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
   final SalesRepository _salesRepository;
   final ProductRepository _productRepository;
   final InvoiceRepository _invoiceRepository;
-  final SmartSearchService _smartSearchService = SmartSearchService();
+  final SmartSearchService _smartSearch = SmartSearchService();
   static const _pageSize = 50;
 
   SalesBloc(this._salesRepository, this._productRepository, this._invoiceRepository)
@@ -285,7 +309,12 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
     emit(SalesLoading());
     try {
       // Use pagination - load first 50 products for faster initial load
-      final products = await _productRepository.getProductsPaginated(limit: _pageSize, offset: 0);
+      final products = await _productRepository.getProductsPaginated(
+        limit: _pageSize,
+        offset: 0,
+        brand: currentState.brandFilter,
+        category: currentState.categoryFilter,
+      );
       final todayInvoices = await _invoiceRepository.getInvoicesToday();
       emit(currentState.copyWith(
         products: products, 
@@ -305,7 +334,12 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
     final currentState = _currentState;
     emit(SalesLoading());
     try {
-      final products = await _productRepository.getProductsPaginated(limit: _pageSize, offset: 0);
+      final products = await _productRepository.getProductsPaginated(
+        limit: _pageSize,
+        offset: 0,
+        brand: currentState.brandFilter,
+        category: currentState.categoryFilter,
+      );
       final todayInvoices = await _invoiceRepository.getInvoicesToday();
       emit(currentState.copyWith(
         products: products, 
@@ -334,12 +368,16 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
         moreProducts = await _productRepository.getProductsPaginated(
           limit: _pageSize, 
           offset: currentState.products.length,
+          brand: currentState.brandFilter,
+          category: currentState.categoryFilter,
         );
       } else {
         moreProducts = await _productRepository.searchProductsPaginated(
           currentState.currentSearchQuery,
           limit: _pageSize,
           offset: currentState.products.length,
+          brand: currentState.brandFilter,
+          category: currentState.categoryFilter,
         );
       }
       
@@ -359,15 +397,26 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
     Emitter<SalesState> emit,
   ) async {
     final currentState = _currentState;
+    final brand = event.brand;
+    final category = event.category;
     
     // If empty query, reload all products immediately
     if (event.query.isEmpty) {
       try {
-        final products = await _productRepository.getProductsPaginated(limit: _pageSize, offset: 0);
+        final products = await _productRepository.getProductsPaginated(
+          limit: _pageSize,
+          offset: 0,
+          brand: brand,
+          category: category,
+        );
         emit(currentState.copyWith(
           products: products,
           hasMore: products.length >= _pageSize,
           currentSearchQuery: '',
+          brandFilter: brand,
+          categoryFilter: category,
+          clearBrandFilter: brand == null,
+          clearCategoryFilter: category == null,
         ));
       } catch (e) {
         emit(SalesError(e.toString()));
@@ -376,47 +425,58 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
     }
     
     try {
-      // Use smart search for fuzzy matching and natural language understanding
-      final smartResults = await _smartSearchService.smartSearchProducts(event.query);
-      
-      // Convert smart search results to Product entities (safe casts)
-      final products = smartResults.map((map) => Product(
-        id: map['id'] as int?,
-        name: (map['name'] as String?) ?? '',
-        barcode: map['barcode'] as String?,
-        quantity: (map['quantity'] as int?) ?? 0,
-        price: (map['price'] as num?)?.toDouble() ?? 0.0,
-        costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0.0,
-        note: map['note'] as String?,
-        supplier: map['supplier'] as String?,
-        minStock: (map['min_stock'] as int?) ?? 5,
-        lastUpdated: map['last_updated'] != null
-            ? DateTime.tryParse(map['last_updated'].toString())
-            : null,
-      )).toList();
-      
+      final products = await _smartSearchProducts(
+        event.query,
+        brand: brand,
+        category: category,
+      );
       emit(currentState.copyWith(
         products: products,
-        hasMore: false, // Smart search returns all relevant results
+        hasMore: false,
         currentSearchQuery: event.query,
+        brandFilter: brand,
+        categoryFilter: category,
+        clearBrandFilter: brand == null,
+        clearCategoryFilter: category == null,
       ));
     } catch (e) {
-      // Fallback to regular search on error
+      // Fallback to SQL LIKE search on error
       try {
         final products = await _productRepository.searchProductsPaginated(
           event.query,
-          limit: _pageSize,
-          offset: 0,
+          limit: 200,
+          brand: brand,
+          category: category,
         );
         emit(currentState.copyWith(
           products: products,
-          hasMore: products.length >= _pageSize,
+          hasMore: products.length >= 200,
           currentSearchQuery: event.query,
+          brandFilter: brand,
+          categoryFilter: category,
+          clearBrandFilter: brand == null,
+          clearCategoryFilter: category == null,
         ));
       } catch (fallbackError) {
         emit(SalesError(fallbackError.toString()));
       }
     }
+  }
+
+  Future<List<Product>> _smartSearchProducts(
+    String query, {
+    String? brand,
+    String? category,
+  }) async {
+    final smartResults = await _smartSearch.smartSearchProducts(query);
+    var products = smartResults.map(Product.fromMap).toList();
+    if (brand != null) {
+      products = products.where((p) => p.brand == brand).toList();
+    }
+    if (category != null) {
+      products = products.where((p) => p.category == category).toList();
+    }
+    return products;
   }
 
   void _onAddToCart(
@@ -599,16 +659,26 @@ class SalesBloc extends Bloc<SalesEvent, SalesState> {
       // Reset state — use paginated load and wrap in separate try-catch
       // so a refresh failure doesn't mask the successful checkout
       try {
-        final products = await _productRepository.getProductsPaginated(limit: _pageSize, offset: 0);
+        final products = await _productRepository.getProductsPaginated(
+          limit: _pageSize,
+          offset: 0,
+          brand: currentState.brandFilter,
+          category: currentState.categoryFilter,
+        );
         final todayInvoices = await _invoiceRepository.getInvoicesToday();
         emit(SalesReady(
           products: products,
           todayInvoices: todayInvoices,
           hasMore: products.length >= _pageSize,
+          brandFilter: currentState.brandFilter,
+          categoryFilter: currentState.categoryFilter,
         ));
       } catch (_) {
         // Checkout succeeded — just emit an empty ready state so UI is usable
-        emit(const SalesReady());
+        emit(SalesReady(
+          brandFilter: currentState.brandFilter,
+          categoryFilter: currentState.categoryFilter,
+        ));
       }
     } catch (e) {
       // Checkout itself failed — restore cart so user doesn't lose data

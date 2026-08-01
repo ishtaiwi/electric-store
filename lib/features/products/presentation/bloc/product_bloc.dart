@@ -14,22 +14,49 @@ abstract class ProductEvent extends Equatable {
   List<Object?> get props => [];
 }
 
-class ProductLoadAll extends ProductEvent {}
+class ProductLoadAll extends ProductEvent {
+  final String? brand;
+  final String? category;
+  final bool force;
 
-class ProductRefresh extends ProductEvent {}
+  const ProductLoadAll({this.brand, this.category, this.force = false});
+
+  @override
+  List<Object?> get props => [brand, category, force];
+}
+
+class ProductRefresh extends ProductEvent {
+  final String? brand;
+  final String? category;
+
+  const ProductRefresh({this.brand, this.category});
+
+  @override
+  List<Object?> get props => [brand, category];
+}
 
 class ProductLoadMore extends ProductEvent {}
 
 class ProductSearch extends ProductEvent {
   final String query;
+  final String? brand;
+  final String? category;
 
-  const ProductSearch(this.query);
+  const ProductSearch(this.query, {this.brand, this.category});
 
   @override
-  List<Object?> get props => [query];
+  List<Object?> get props => [query, brand, category];
 }
 
-class ProductLoadLowStock extends ProductEvent {}
+class ProductLoadLowStock extends ProductEvent {
+  final String? brand;
+  final String? category;
+
+  const ProductLoadLowStock({this.brand, this.category});
+
+  @override
+  List<Object?> get props => [brand, category];
+}
 
 class ProductCreate extends ProductEvent {
   final Product product;
@@ -104,16 +131,30 @@ class ProductLoaded extends ProductState {
   final bool hasMore;
   final bool isLoadingMore;
   final String currentSearchQuery;
+  final String? brandFilter;
+  final String? categoryFilter;
+  final bool lowStockOnly;
 
   const ProductLoaded({
     required this.products,
     this.hasMore = false,
     this.isLoadingMore = false,
     this.currentSearchQuery = '',
+    this.brandFilter,
+    this.categoryFilter,
+    this.lowStockOnly = false,
   });
 
   @override
-  List<Object?> get props => [products, hasMore, isLoadingMore, currentSearchQuery];
+  List<Object?> get props => [
+        products,
+        hasMore,
+        isLoadingMore,
+        currentSearchQuery,
+        brandFilter,
+        categoryFilter,
+        lowStockOnly,
+      ];
 }
 
 class ProductError extends ProductState {
@@ -137,7 +178,7 @@ class ProductOperationSuccess extends ProductState {
 // BLoC
 class ProductBloc extends Bloc<ProductEvent, ProductState> {
   final ProductRepository _productRepository;
-  final SmartSearchService _smartSearchService = SmartSearchService();
+  final SmartSearchService _smartSearch = SmartSearchService();
   static const int _pageSize = 50;
 
   ProductBloc(this._productRepository) : super(ProductInitial()) {
@@ -157,20 +198,32 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     ProductLoadAll event,
     Emitter<ProductState> emit,
   ) async {
-    // If we already have the full product list (not from a search), re-emit it
-    if (state is ProductLoaded && 
+    final brand = event.brand;
+    final category = event.category;
+    if (!event.force &&
+        state is ProductLoaded &&
         (state as ProductLoaded).products.isNotEmpty &&
-        (state as ProductLoaded).currentSearchQuery.isEmpty) {
+        (state as ProductLoaded).currentSearchQuery.isEmpty &&
+        (state as ProductLoaded).brandFilter == brand &&
+        (state as ProductLoaded).categoryFilter == category &&
+        !(state as ProductLoaded).lowStockOnly) {
       return;
     }
     
     emit(ProductLoading());
     try {
-      final products = await _productRepository.getProductsPaginated(limit: _pageSize, offset: 0);
+      final products = await _productRepository.getProductsPaginated(
+        limit: _pageSize,
+        offset: 0,
+        brand: brand,
+        category: category,
+      );
       emit(ProductLoaded(
         products: products,
         hasMore: products.length >= _pageSize,
         currentSearchQuery: '',
+        brandFilter: brand,
+        categoryFilter: category,
       ));
     } catch (e) {
       emit(ProductError(e.toString()));
@@ -183,11 +236,18 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
   ) async {
     emit(ProductLoading());
     try {
-      final products = await _productRepository.getProductsPaginated(limit: _pageSize, offset: 0);
+      final products = await _productRepository.getProductsPaginated(
+        limit: _pageSize,
+        offset: 0,
+        brand: event.brand,
+        category: event.category,
+      );
       emit(ProductLoaded(
         products: products,
         hasMore: products.length >= _pageSize,
         currentSearchQuery: '',
+        brandFilter: event.brand,
+        categoryFilter: event.category,
       ));
     } catch (e) {
       emit(ProductError(e.toString()));
@@ -208,18 +268,30 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
       hasMore: currentState.hasMore,
       isLoadingMore: true,
       currentSearchQuery: currentState.currentSearchQuery,
+      brandFilter: currentState.brandFilter,
+      categoryFilter: currentState.categoryFilter,
+      lowStockOnly: currentState.lowStockOnly,
     ));
 
     try {
       List<Product> moreProducts;
-      if (currentState.currentSearchQuery.isEmpty) {
+      if (currentState.lowStockOnly) {
+        moreProducts = [];
+      } else if (currentState.currentSearchQuery.isEmpty) {
         moreProducts = await _productRepository.getProductsPaginated(
           limit: _pageSize,
           offset: currentState.products.length,
+          brand: currentState.brandFilter,
+          category: currentState.categoryFilter,
         );
       } else {
-        // For search, load all results (already limited in repo)
-        moreProducts = [];
+        moreProducts = await _productRepository.searchProductsPaginated(
+          currentState.currentSearchQuery,
+          limit: _pageSize,
+          offset: currentState.products.length,
+          brand: currentState.brandFilter,
+          category: currentState.categoryFilter,
+        );
       }
 
       final allProducts = [...currentState.products, ...moreProducts];
@@ -228,6 +300,9 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
         hasMore: moreProducts.length >= _pageSize,
         isLoadingMore: false,
         currentSearchQuery: currentState.currentSearchQuery,
+        brandFilter: currentState.brandFilter,
+        categoryFilter: currentState.categoryFilter,
+        lowStockOnly: currentState.lowStockOnly,
       ));
     } catch (e) {
       emit(ProductLoaded(
@@ -235,6 +310,9 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
         hasMore: currentState.hasMore,
         isLoadingMore: false,
         currentSearchQuery: currentState.currentSearchQuery,
+        brandFilter: currentState.brandFilter,
+        categoryFilter: currentState.categoryFilter,
+        lowStockOnly: currentState.lowStockOnly,
       ));
     }
   }
@@ -244,49 +322,63 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
     Emitter<ProductState> emit,
   ) async {
     if (event.query.isEmpty) {
-      add(ProductLoadAll());
+      add(ProductLoadAll(
+        brand: event.brand,
+        category: event.category,
+        force: true,
+      ));
       return;
     }
 
-    emit(ProductLoading());
+    // Keep current list visible while searching (no full-page loading flicker)
     try {
-      // Use smart search for fuzzy matching and natural language understanding
-      final smartResults = await _smartSearchService.smartSearchProducts(event.query);
-      
-      // Convert smart search results to Product entities (safe casts)
-      final products = smartResults.map((map) => Product(
-        id: map['id'] as int?,
-        name: (map['name'] as String?) ?? '',
-        barcode: map['barcode'] as String?,
-        quantity: (map['quantity'] as int?) ?? 0,
-        price: (map['price'] as num?)?.toDouble() ?? 0.0,
-        costPrice: (map['cost_price'] as num?)?.toDouble() ?? 0.0,
-        note: map['note'] as String?,
-        supplier: map['supplier'] as String?,
-        minStock: (map['min_stock'] as int?) ?? 5,
-        lastUpdated: map['last_updated'] != null
-            ? DateTime.tryParse(map['last_updated'].toString())
-            : null,
-      )).toList();
-      
+      final products = await _smartSearchProducts(
+        event.query,
+        brand: event.brand,
+        category: event.category,
+      );
       emit(ProductLoaded(
         products: products,
         hasMore: false,
         currentSearchQuery: event.query,
+        brandFilter: event.brand,
+        categoryFilter: event.category,
       ));
     } catch (e) {
-      // Fallback to regular search on error
       try {
-        final products = await _productRepository.searchProducts(event.query);
+        final products = await _productRepository.searchProductsPaginated(
+          event.query,
+          limit: 200,
+          brand: event.brand,
+          category: event.category,
+        );
         emit(ProductLoaded(
           products: products,
-          hasMore: false,
+          hasMore: products.length >= 200,
           currentSearchQuery: event.query,
+          brandFilter: event.brand,
+          categoryFilter: event.category,
         ));
       } catch (fallbackError) {
         emit(ProductError(fallbackError.toString()));
       }
     }
+  }
+
+  Future<List<Product>> _smartSearchProducts(
+    String query, {
+    String? brand,
+    String? category,
+  }) async {
+    final smartResults = await _smartSearch.smartSearchProducts(query);
+    var products = smartResults.map(Product.fromMap).toList();
+    if (brand != null) {
+      products = products.where((p) => p.brand == brand).toList();
+    }
+    if (category != null) {
+      products = products.where((p) => p.category == category).toList();
+    }
+    return products;
   }
 
   Future<void> _onLoadLowStock(
@@ -295,8 +387,16 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
   ) async {
     emit(ProductLoading());
     try {
-      final products = await _productRepository.getLowStockProducts();
-      emit(ProductLoaded(products: products));
+      final products = await _productRepository.getLowStockProducts(
+        brand: event.brand,
+        category: event.category,
+      );
+      emit(ProductLoaded(
+        products: products,
+        brandFilter: event.brand,
+        categoryFilter: event.category,
+        lowStockOnly: true,
+      ));
     } catch (e) {
       emit(ProductError(e.toString()));
     }
@@ -321,6 +421,10 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
       emit(ProductLoaded(
         products: currentList,
         hasMore: currentState is ProductLoaded ? (currentState).hasMore : false,
+        currentSearchQuery: currentState is ProductLoaded ? currentState.currentSearchQuery : '',
+        brandFilter: currentState is ProductLoaded ? currentState.brandFilter : null,
+        categoryFilter: currentState is ProductLoaded ? currentState.categoryFilter : null,
+        lowStockOnly: currentState is ProductLoaded ? currentState.lowStockOnly : false,
       ));
       
       emit(ProductOperationSuccess(LocalizationService().get('productCreated')));
@@ -329,6 +433,10 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
       emit(ProductLoaded(
         products: currentList,
         hasMore: currentState is ProductLoaded ? (currentState).hasMore : false,
+        currentSearchQuery: currentState is ProductLoaded ? currentState.currentSearchQuery : '',
+        brandFilter: currentState is ProductLoaded ? currentState.brandFilter : null,
+        categoryFilter: currentState is ProductLoaded ? currentState.categoryFilter : null,
+        lowStockOnly: currentState is ProductLoaded ? currentState.lowStockOnly : false,
       ));
     } catch (e) {
       emit(ProductError(e.toString()));
@@ -357,6 +465,10 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
       emit(ProductLoaded(
         products: currentList,
         hasMore: currentState is ProductLoaded ? (currentState).hasMore : false,
+        currentSearchQuery: currentState is ProductLoaded ? currentState.currentSearchQuery : '',
+        brandFilter: currentState is ProductLoaded ? currentState.brandFilter : null,
+        categoryFilter: currentState is ProductLoaded ? currentState.categoryFilter : null,
+        lowStockOnly: currentState is ProductLoaded ? currentState.lowStockOnly : false,
       ));
       
       emit(ProductOperationSuccess(LocalizationService().get('productUpdated')));
@@ -365,6 +477,10 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
       emit(ProductLoaded(
         products: currentList,
         hasMore: currentState is ProductLoaded ? (currentState).hasMore : false,
+        currentSearchQuery: currentState is ProductLoaded ? currentState.currentSearchQuery : '',
+        brandFilter: currentState is ProductLoaded ? currentState.brandFilter : null,
+        categoryFilter: currentState is ProductLoaded ? currentState.categoryFilter : null,
+        lowStockOnly: currentState is ProductLoaded ? currentState.lowStockOnly : false,
       ));
     } catch (e) {
       emit(ProductError(e.toString()));
@@ -390,6 +506,10 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
       emit(ProductLoaded(
         products: currentList,
         hasMore: currentState is ProductLoaded ? (currentState).hasMore : false,
+        currentSearchQuery: currentState is ProductLoaded ? currentState.currentSearchQuery : '',
+        brandFilter: currentState is ProductLoaded ? currentState.brandFilter : null,
+        categoryFilter: currentState is ProductLoaded ? currentState.categoryFilter : null,
+        lowStockOnly: currentState is ProductLoaded ? currentState.lowStockOnly : false,
       ));
       
       emit(ProductOperationSuccess(LocalizationService().get('productDeleted')));
@@ -398,6 +518,10 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
       emit(ProductLoaded(
         products: currentList,
         hasMore: currentState is ProductLoaded ? (currentState).hasMore : false,
+        currentSearchQuery: currentState is ProductLoaded ? currentState.currentSearchQuery : '',
+        brandFilter: currentState is ProductLoaded ? currentState.brandFilter : null,
+        categoryFilter: currentState is ProductLoaded ? currentState.categoryFilter : null,
+        lowStockOnly: currentState is ProductLoaded ? currentState.lowStockOnly : false,
       ));
     } catch (e) {
       if (e is ProductInUseException) {
@@ -440,6 +564,10 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
       emit(ProductLoaded(
         products: currentList,
         hasMore: currentState is ProductLoaded ? (currentState).hasMore : false,
+        currentSearchQuery: currentState is ProductLoaded ? currentState.currentSearchQuery : '',
+        brandFilter: currentState is ProductLoaded ? currentState.brandFilter : null,
+        categoryFilter: currentState is ProductLoaded ? currentState.categoryFilter : null,
+        lowStockOnly: currentState is ProductLoaded ? currentState.lowStockOnly : false,
       ));
       
       emit(ProductOperationSuccess(LocalizationService().get('stockAdjusted')));
@@ -448,6 +576,10 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
       emit(ProductLoaded(
         products: currentList,
         hasMore: currentState is ProductLoaded ? (currentState).hasMore : false,
+        currentSearchQuery: currentState is ProductLoaded ? currentState.currentSearchQuery : '',
+        brandFilter: currentState is ProductLoaded ? currentState.brandFilter : null,
+        categoryFilter: currentState is ProductLoaded ? currentState.categoryFilter : null,
+        lowStockOnly: currentState is ProductLoaded ? currentState.lowStockOnly : false,
       ));
     } catch (e) {
       emit(ProductError(e.toString()));
@@ -476,6 +608,10 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
       emit(ProductLoaded(
         products: currentList,
         hasMore: currentState.hasMore,
+        currentSearchQuery: currentState.currentSearchQuery,
+        brandFilter: currentState.brandFilter,
+        categoryFilter: currentState.categoryFilter,
+        lowStockOnly: currentState.lowStockOnly,
       ));
     }
   }

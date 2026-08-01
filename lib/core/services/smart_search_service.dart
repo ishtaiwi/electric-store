@@ -185,10 +185,10 @@ class SmartSearchService {
     if (query.isEmpty) return [];
     
     try {
-      // Search with the raw query as-is against name, barcode, note, supplier
+      // Search with the raw query as-is against name, barcode, note, brand, category, supplier
       final results = await db.rawQuery(
-        'SELECT * FROM products WHERE name LIKE ? OR barcode LIKE ? OR note LIKE ? OR supplier LIKE ? ORDER BY name ASC LIMIT 200',
-        ['%$query%', '%$query%', '%$query%', '%$query%'],
+        'SELECT * FROM products WHERE name LIKE ? OR barcode LIKE ? OR note LIKE ? OR brand LIKE ? OR category LIKE ? OR supplier LIKE ? ORDER BY name ASC LIMIT 200',
+        ['%$query%', '%$query%', '%$query%', '%$query%', '%$query%', '%$query%'],
       );
       return _filterSeen(results, seenIds);
     } catch (e) {

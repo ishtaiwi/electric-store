@@ -61,10 +61,23 @@ CREATE TABLE products (
     price REAL NOT NULL DEFAULT 0,
     cost_price REAL NOT NULL DEFAULT 0,
     note TEXT,
+    brand TEXT,
+    category TEXT,
     supplier TEXT,
     min_stock INTEGER DEFAULT 5,
     last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    supplier_id INTEGER REFERENCES suppliers(id)
+    supplier_id INTEGER REFERENCES suppliers(id),
+    image_url TEXT
+);
+
+CREATE TABLE product_brands (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE product_categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
 );
 
 -- Invoices table

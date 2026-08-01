@@ -121,10 +121,8 @@ class SupabaseClientService {
   }
 
   Future<bool> getSyncEnabled() async {
-    final settings = await _readSettings();
-    final v = settings[SupabaseConfigKeys.syncEnabled];
-    if (v == null) return true; // default on when secrets exist
-    return v == '1' || v == 'true';
+    final mode = await getSyncMode();
+    return mode != DesktopSyncMode.off;
   }
 
   Future<void> setSyncEnabled(bool enabled) async {
@@ -135,10 +133,7 @@ class SupabaseClientService {
   }
 
   Future<bool> getAutoSync() async {
-    final settings = await _readSettings();
-    final v = settings[SupabaseConfigKeys.autoSync];
-    if (v == null) return true;
-    return v == '1' || v == 'true';
+    return (await getSyncMode()) == DesktopSyncMode.upload;
   }
 
   Future<void> setAutoSync(bool enabled) async {
@@ -146,6 +141,25 @@ class SupabaseClientService {
       SupabaseConfigKeys.autoSync,
       enabled ? '1' : '0',
     );
+  }
+
+  /// Preferred API: upload (main) / download (secondary) / off.
+  /// Default is [DesktopSyncMode.off] until the user enables a mode.
+  /// Once saved, the choice persists across app restarts.
+  Future<DesktopSyncMode> getSyncMode() async {
+    final settings = await _readSettings();
+    final raw = settings[SupabaseConfigKeys.syncMode];
+    if (raw != null && raw.trim().isNotEmpty) {
+      return DesktopSyncModeX.parse(raw);
+    }
+    // No saved choice yet → both switches stay off.
+    return DesktopSyncMode.off;
+  }
+
+  Future<void> setSyncMode(DesktopSyncMode mode) async {
+    await _writeSetting(SupabaseConfigKeys.syncMode, mode.storageValue);
+    await setSyncEnabled(mode != DesktopSyncMode.off);
+    await setAutoSync(mode == DesktopSyncMode.upload);
   }
 
   Future<String?> getLastSyncAt() async {

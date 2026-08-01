@@ -7,6 +7,7 @@ import '../../../../core/di/injection_container.dart' as di;
 import '../../../suppliers/domain/entities/supplier.dart';
 import '../../../suppliers/domain/repositories/supplier_repository.dart';
 import '../../domain/entities/product.dart';
+import '../../domain/repositories/product_repository.dart';
 import '../bloc/product_bloc.dart';
 
 class ProductFormDialog extends StatefulWidget {
@@ -30,6 +31,10 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
   late final TextEditingController _minStockController;
   
   List<Supplier> _suppliers = [];
+  List<String> _brands = [];
+  List<String> _categories = [];
+  String? _selectedBrand;
+  String? _selectedCategory;
   int? _selectedSupplierId;
 
   bool get isEditing => widget.product != null;
@@ -53,16 +58,36 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
     _minStockController = TextEditingController(
       text: (widget.product?.minStock ?? 5).toString(),
     );
+    _selectedBrand = widget.product?.brand;
+    _selectedCategory = widget.product?.category;
     _selectedSupplierId = widget.product?.supplierId;
-    _loadSuppliers();
+    _loadLookups();
   }
 
-  Future<void> _loadSuppliers() async {
+  Future<void> _loadLookups() async {
     try {
-      final repo = di.sl<SupplierRepository>();
-      final suppliers = await repo.getAllSuppliers();
+      final supplierRepo = di.sl<SupplierRepository>();
+      final productRepo = di.sl<ProductRepository>();
+      final results = await Future.wait([
+        supplierRepo.getAllSuppliers(),
+        productRepo.getBrands(),
+        productRepo.getCategories(),
+      ]);
       if (mounted) {
-        setState(() => _suppliers = suppliers);
+        setState(() {
+          _suppliers = results[0] as List<Supplier>;
+          _brands = List<String>.from(results[1] as List<String>);
+          _categories = List<String>.from(results[2] as List<String>);
+          // Keep legacy values selectable even if removed from master list
+          final brand = _selectedBrand?.trim();
+          if (brand != null && brand.isNotEmpty && !_brands.contains(brand)) {
+            _brands = [..._brands, brand]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+          }
+          final category = _selectedCategory?.trim();
+          if (category != null && category.isNotEmpty && !_categories.contains(category)) {
+            _categories = [..._categories, category]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+          }
+        });
       }
     } catch (_) {}
   }
@@ -82,6 +107,8 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
 
   void _save() {
     if (_formKey.currentState!.validate()) {
+      final brand = _selectedBrand?.trim() ?? '';
+      final category = _selectedCategory?.trim() ?? '';
       final product = Product(
         id: widget.product?.id,
         name: _nameController.text.trim(),
@@ -90,6 +117,8 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
         costPrice: double.tryParse(_costPriceController.text) ?? 0,
         quantity: int.tryParse(_quantityController.text) ?? 0,
         note: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
+        brand: brand.isEmpty ? null : brand,
+        category: category.isEmpty ? null : category,
         supplier: _supplierController.text.trim().isEmpty ? null : _supplierController.text.trim(),
         supplierId: _selectedSupplierId,
         minStock: int.tryParse(_minStockController.text) ?? 5,
@@ -103,6 +132,38 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
 
       Navigator.pop(context);
     }
+  }
+
+  Widget _buildSelectField({
+    required String? value,
+    required List<String> options,
+    required String label,
+    required IconData icon,
+    required ValueChanged<String?> onChanged,
+  }) {
+    final l10n = LocalizationService();
+    final effectiveValue = (value != null && options.contains(value)) ? value : null;
+    return DropdownButtonFormField<String?>(
+      value: effectiveValue,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      items: [
+        DropdownMenuItem<String?>(
+          value: null,
+          child: Text(l10n.get('noneSelected')),
+        ),
+        ...options.map(
+          (o) => DropdownMenuItem<String?>(
+            value: o,
+            child: Text(o),
+          ),
+        ),
+      ],
+      onChanged: onChanged,
+    );
   }
 
   @override
@@ -176,6 +237,33 @@ class _ProductFormDialogState extends State<ProductFormDialog> {
                           }
                           return null;
                         },
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Brand (النوع) + Category (الصنف) — select from managed lists
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: _buildSelectField(
+                              value: _selectedBrand,
+                              options: _brands,
+                              label: l10n.get('brand'),
+                              icon: Icons.sell_outlined,
+                              onChanged: (value) => setState(() => _selectedBrand = value),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildSelectField(
+                              value: _selectedCategory,
+                              options: _categories,
+                              label: l10n.get('productCategory'),
+                              icon: Icons.category_outlined,
+                              onChanged: (value) => setState(() => _selectedCategory = value),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 16),
 

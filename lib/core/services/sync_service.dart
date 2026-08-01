@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../database/database_helper.dart';
 import '../supabase/supabase_client_service.dart';
@@ -27,9 +28,11 @@ enum SyncDirection { push, pull, both }
 
 /// Hybrid sync: local SQLite ↔ Supabase Postgres.
 ///
-/// **Policy: desktop is the source of truth.**
-/// Default and automatic sync only **push** local → Supabase so the cloud
-/// always mirrors this PC. Pull is available only as a manual recovery tool.
+/// **Upload mode (main PC):** auto-push on every local DB change.
+/// **Download mode (secondary PC):** auto-pull when cloud data changes.
+/// Mobile-only tables are never synced to desktop.
+/// Product photos in Supabase Storage are never deleted by sync; `image_url`
+/// is preserved when the desktop has no photo.
 class SyncService {
   SyncService(this._databaseHelper, this._supabase);
 
@@ -37,25 +40,64 @@ class SyncService {
   final SupabaseClientService _supabase;
 
   static const int _pageSize = 1000;
+  static const _realtimeTables = [
+    'products',
+    'invoices',
+    'sales',
+    'customers',
+    'customer_payments',
+    'suppliers',
+    'expenses',
+    'users',
+  ];
 
   Timer? _debounceTimer;
   Timer? _periodicTimer;
   bool _pushInFlight = false;
   bool _pushQueued = false;
+  bool _pullInFlight = false;
+  bool _pullQueued = false;
+  RealtimeChannel? _pullChannel;
 
-  /// Debounced upload (desktop → cloud). Call after local data changes.
-  void scheduleDesktopPush({
+  /// Called after any local DB write — pushes only in upload mode.
+  void scheduleAutoSync({
     Duration delay = const Duration(seconds: 2),
   }) {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(delay, () {
-      unawaited(pushFromDesktop());
+    _debounceTimer = Timer(delay, () async {
+      final mode = await _supabase.getSyncMode();
+      if (mode == DesktopSyncMode.upload) {
+        unawaited(pushFromDesktop());
+      }
+      // Download mode reacts to cloud changes (realtime / periodic), not local writes.
     });
   }
 
-  /// Periodic upload while the app is open (keeps Supabase = desktop).
+  /// Back-compat alias used by older call sites.
+  void scheduleDesktopPush({Duration delay = const Duration(seconds: 2)}) {
+    scheduleAutoSync(delay: delay);
+  }
+
+  /// Start automatic sync for the current mode (upload or download).
+  Future<void> applySyncMode() async {
+    stopAutomaticSync();
+    final mode = await _supabase.getSyncMode();
+    switch (mode) {
+      case DesktopSyncMode.upload:
+        startPeriodicDesktopPush(interval: const Duration(minutes: 5));
+        unawaited(pushFromDesktop());
+      case DesktopSyncMode.download:
+        await _startDownloadListeners();
+        startPeriodicDesktopPull(interval: const Duration(minutes: 2));
+        // First sync: full replace so secondary gets ALL desktop tables.
+        unawaited(pullFromCloud(soft: false));
+      case DesktopSyncMode.off:
+        break;
+    }
+  }
+
   void startPeriodicDesktopPush({
-    Duration interval = const Duration(minutes: 2),
+    Duration interval = const Duration(minutes: 5),
   }) {
     _periodicTimer?.cancel();
     _periodicTimer = Timer.periodic(interval, (_) {
@@ -63,27 +105,92 @@ class SyncService {
     });
   }
 
-  void stopPeriodicDesktopPush() {
+  void startPeriodicDesktopPull({
+    Duration interval = const Duration(minutes: 2),
+  }) {
+    _periodicTimer?.cancel();
+    _periodicTimer = Timer.periodic(interval, (_) {
+      unawaited(pullFromCloud(soft: true));
+    });
+  }
+
+  void stopPeriodicDesktopPush() => stopAutomaticSync();
+
+  void stopAutomaticSync() {
     _periodicTimer?.cancel();
     _periodicTimer = null;
     _debounceTimer?.cancel();
     _debounceTimer = null;
+    unawaited(_stopDownloadListeners());
   }
 
-  /// Upload local SQLite to Supabase (desktop source of truth).
+  Future<void> _startDownloadListeners() async {
+    await _stopDownloadListeners();
+    final client = _supabase.client;
+    if (client == null) return;
+
+    var channel = client.channel('desktop-auto-pull');
+    for (final table in _realtimeTables) {
+      channel = channel.onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: table,
+        callback: (_) {
+          _debounceTimer?.cancel();
+          _debounceTimer = Timer(const Duration(seconds: 3), () {
+            unawaited(pullFromCloud(soft: true));
+          });
+        },
+      );
+    }
+    _pullChannel = channel.subscribe();
+  }
+
+  Future<void> _stopDownloadListeners() async {
+    final channel = _pullChannel;
+    _pullChannel = null;
+    if (channel == null) return;
+    try {
+      await _supabase.client?.removeChannel(channel);
+    } catch (e) {
+      debugPrint('stop download listeners: $e');
+    }
+  }
+
+  /// Automatic upload (upload mode only).
   Future<SyncResult> pushFromDesktop() async {
-    final enabled = await _supabase.getSyncEnabled();
-    if (!enabled) {
+    final mode = await _supabase.getSyncMode();
+    if (mode != DesktopSyncMode.upload) {
       return const SyncResult(
         success: false,
-        message: 'Cloud sync is disabled in Settings.',
+        message: 'Upload mode is off on this PC.',
       );
     }
     return sync(direction: SyncDirection.push);
   }
 
+  /// Automatic / soft download (download mode only).
+  Future<SyncResult> pullFromCloud({bool soft = true}) async {
+    final mode = await _supabase.getSyncMode();
+    if (mode != DesktopSyncMode.download) {
+      return const SyncResult(
+        success: false,
+        message: 'Download mode is off on this PC.',
+      );
+    }
+    return sync(direction: SyncDirection.pull, softPull: soft);
+  }
+
+  /// Manual upload from Settings (works in any mode).
+  Future<SyncResult> uploadNow() => sync(direction: SyncDirection.push);
+
+  /// Manual full download from Settings (works in any mode).
+  Future<SyncResult> downloadNow() =>
+      sync(direction: SyncDirection.pull, softPull: false);
+
   Future<SyncResult> sync({
     SyncDirection direction = SyncDirection.push,
+    bool softPull = false,
   }) async {
     if (direction == SyncDirection.push || direction == SyncDirection.both) {
       if (_pushInFlight) {
@@ -94,6 +201,16 @@ class SyncService {
         );
       }
       _pushInFlight = true;
+    }
+    if (direction == SyncDirection.pull || direction == SyncDirection.both) {
+      if (_pullInFlight) {
+        _pullQueued = true;
+        return const SyncResult(
+          success: true,
+          message: 'Pull already running; queued another pass.',
+        );
+      }
+      _pullInFlight = true;
     }
 
     final errors = <String>[];
@@ -119,7 +236,6 @@ class SyncService {
       }
 
       if (direction == SyncDirection.push || direction == SyncDirection.both) {
-        // 1) Upsert all local rows (parents first)
         for (final table in supabaseSyncTables) {
           try {
             pushed[table] = await _upsertTable(table);
@@ -128,7 +244,6 @@ class SyncService {
             debugPrint('push $table error: $e');
           }
         }
-        // 2) Remove cloud rows that no longer exist on desktop (children first)
         for (final table in supabaseSyncTables.reversed) {
           try {
             await _pruneRemoteTable(table);
@@ -140,33 +255,55 @@ class SyncService {
       }
 
       if (direction == SyncDirection.pull || direction == SyncDirection.both) {
-        final preservedCreds = await _supabase.getStoredCredentials();
-        final preservedEnabled = await _supabase.getSyncEnabled();
-        final preservedAuto = await _supabase.getAutoSync();
+        final preservedMode = await _supabase.getSyncMode();
         final preservedLast = await _supabase.getLastSyncAt();
 
         await _databaseHelper.withoutSyncNotify(() async {
+          final db = await _databaseHelper.database;
+          await db.execute('PRAGMA foreign_keys = OFF');
           try {
-            await _clearLocalTables();
-          } catch (e) {
-            errors.add('clear local: $e');
-          }
-          for (final table in supabaseSyncTables) {
-            try {
-              pulled[table] = await _pullTable(table, clearFirst: false);
-            } catch (e) {
-              errors.add('pull $table: $e');
-              debugPrint('pull $table error: $e');
+            if (!softPull) {
+              try {
+                await _clearLocalTables(restoreForeignKeys: false);
+              } catch (e) {
+                errors.add('clear local: $e');
+              }
             }
+
+            for (final table in supabaseSyncTables) {
+              try {
+                if (!await _localTableExists(table)) {
+                  debugPrint('pull skip $table: missing locally');
+                  continue;
+                }
+                final clearFirst = softPull && softPullReplaceTables.contains(table);
+                pulled[table] = await _pullTable(
+                  table,
+                  clearFirst: clearFirst,
+                );
+              } catch (e) {
+                errors.add('pull $table: $e');
+                debugPrint('pull $table error: $e');
+              }
+            }
+
+            if (softPull) {
+              for (final table in supabaseSyncTables.reversed) {
+                try {
+                  if (!await _localTableExists(table)) continue;
+                  await _pruneLocalTable(table);
+                } catch (e) {
+                  errors.add('prune local $table: $e');
+                  debugPrint('prune local $table error: $e');
+                }
+              }
+            }
+          } finally {
+            await db.execute('PRAGMA foreign_keys = ON');
           }
         });
 
-        await _supabase.saveCredentials(
-          url: preservedCreds['url'] ?? '',
-          anonKey: preservedCreds['anonKey'] ?? '',
-        );
-        await _supabase.setSyncEnabled(preservedEnabled);
-        await _supabase.setAutoSync(preservedAuto);
+        await _supabase.setSyncMode(preservedMode);
         if (preservedLast != null && preservedLast.isNotEmpty) {
           await _supabase.setLastSyncAt(
             DateTime.tryParse(preservedLast) ?? DateTime.now(),
@@ -180,14 +317,22 @@ class SyncService {
       final summary = StringBuffer();
       if (pushed.isNotEmpty) {
         final total = pushed.values.fold<int>(0, (a, b) => a + b);
-        summary.write('Uploaded $total rows from desktop. ');
+        summary.write('Uploaded $total rows. ');
       }
       if (pulled.isNotEmpty) {
         final total = pulled.values.fold<int>(0, (a, b) => a + b);
-        summary.write('Downloaded $total rows. ');
+        final parts = pulled.entries
+            .where((e) => e.value > 0)
+            .map((e) => '${e.key}:${e.value}')
+            .join(', ');
+        summary.write('Downloaded $total rows');
+        if (parts.isNotEmpty) {
+          summary.write(' ($parts)');
+        }
+        summary.write('. ');
       }
       if (errors.isNotEmpty) {
-        summary.write('${errors.length} error(s).');
+        summary.write('${errors.length} error(s): ${errors.take(3).join(' | ')}');
       }
 
       return SyncResult(
@@ -212,7 +357,17 @@ class SyncService {
         _pushInFlight = false;
         if (_pushQueued) {
           _pushQueued = false;
-          scheduleDesktopPush(delay: const Duration(seconds: 2));
+          scheduleAutoSync(delay: const Duration(seconds: 2));
+        }
+      }
+      if (direction == SyncDirection.pull || direction == SyncDirection.both) {
+        _pullInFlight = false;
+        if (_pullQueued) {
+          _pullQueued = false;
+          _debounceTimer?.cancel();
+          _debounceTimer = Timer(const Duration(seconds: 2), () {
+            unawaited(pullFromCloud(soft: true));
+          });
         }
       }
     }
@@ -233,14 +388,87 @@ class SyncService {
     var count = 0;
     for (var i = 0; i < rows.length; i += _pageSize) {
       final end = (i + _pageSize < rows.length) ? i + _pageSize : rows.length;
-      final chunk = rows.sublist(i, end).map(_normalizeRowForRemote).toList();
-      await client.from(table).upsert(chunk, onConflict: 'id');
+      var chunk = rows.sublist(i, end).map(_normalizeRowForRemote).toList();
+      if (table == 'products') {
+        chunk = await _mergeRemoteProductImages(chunk);
+      }
+      // store_settings is unique on setting_key; local/cloud ids often differ.
+      String onConflict = 'id';
+      if (table == 'store_settings') {
+        onConflict = 'setting_key';
+        chunk = chunk.map((row) {
+          final copy = Map<String, dynamic>.from(row)..remove('id');
+          return copy;
+        }).toList();
+      }
+      // defaultToNull: false — omitted columns (e.g. image_url) are not forced to null on insert.
+      await client.from(table).upsert(
+            chunk,
+            onConflict: onConflict,
+            defaultToNull: false,
+          );
       count += chunk.length;
     }
     return count;
   }
 
+  /// Keep Supabase product photos when desktop has no local image_url yet.
+  /// Sync never touches Storage (`product-images` bucket) — files stay forever.
+  Future<List<Map<String, dynamic>>> _mergeRemoteProductImages(
+    List<Map<String, dynamic>> chunk,
+  ) async {
+    String? cleanedUrl(dynamic value) {
+      if (value is! String) return null;
+      final t = value.trim();
+      return t.isEmpty ? null : t;
+    }
+
+    final idsNeedingRemote = <int>[];
+    for (final row in chunk) {
+      final local = cleanedUrl(row['image_url']);
+      if (local != null) {
+        row['image_url'] = local;
+        continue;
+      }
+      // Omit empty/null so upsert does not wipe cloud photos.
+      row.remove('image_url');
+      final id = row['id'];
+      if (id != null) idsNeedingRemote.add(int.parse(id.toString()));
+    }
+
+    if (idsNeedingRemote.isEmpty) return chunk;
+
+    try {
+      final remoteRows = await _supabase.client!
+          .from('products')
+          .select('id, image_url')
+          .inFilter('id', idsNeedingRemote);
+      final remoteById = <int, String>{};
+      for (final row in List<Map<String, dynamic>>.from(remoteRows as List)) {
+        final id = row['id'];
+        final url = cleanedUrl(row['image_url']);
+        if (id != null && url != null) {
+          remoteById[int.parse(id.toString())] = url;
+        }
+      }
+      for (final row in chunk) {
+        if (row.containsKey('image_url')) continue;
+        final id = row['id'];
+        if (id == null) continue;
+        final remoteUrl = remoteById[int.parse(id.toString())];
+        if (remoteUrl != null) {
+          row['image_url'] = remoteUrl;
+        }
+      }
+    } catch (e) {
+      // On failure, image_url stays omitted → cloud photo is left unchanged.
+      debugPrint('preserve product images failed: $e');
+    }
+    return chunk;
+  }
+
   /// Delete remote rows whose ids are not present on the desktop DB.
+  /// Never deletes files from Supabase Storage (product images stay in bucket).
   Future<void> _pruneRemoteTable(String table) async {
     final db = await _databaseHelper.database;
     Set<int> localIds;
@@ -275,6 +503,8 @@ class SyncService {
         remoteIds.where((id) => !localIds.contains(id)).toList();
     if (toDelete.isEmpty) return;
 
+    // Note: product-images Storage files are never deleted here.
+    // image_url on surviving products is protected during upsert merge.
     for (var i = 0; i < toDelete.length; i += 100) {
       final end = (i + 100 < toDelete.length) ? i + 100 : toDelete.length;
       final chunk = toDelete.sublist(i, end);
@@ -283,7 +513,58 @@ class SyncService {
     debugPrint('pruned $table: removed ${toDelete.length} remote row(s)');
   }
 
-  Future<void> _clearLocalTables() async {
+  /// Soft pull helper: remove local rows that no longer exist in cloud.
+  Future<void> _pruneLocalTable(String table) async {
+    if (table == 'store_settings') return;
+
+    final client = _supabase.client!;
+    final db = await _databaseHelper.database;
+
+    final remoteIds = <int>{};
+    var from = 0;
+    while (true) {
+      final page = await client
+          .from(table)
+          .select('id')
+          .range(from, from + _pageSize - 1);
+      final list = List<Map<String, dynamic>>.from(page as List);
+      for (final row in list) {
+        final id = row['id'];
+        if (id != null) remoteIds.add(int.parse(id.toString()));
+      }
+      if (list.length < _pageSize) break;
+      from += _pageSize;
+    }
+
+    List<Map<String, Object?>> localRows;
+    try {
+      localRows = await db.query(table, columns: ['id']);
+    } catch (_) {
+      return;
+    }
+
+    final toDelete = <int>[];
+    for (final row in localRows) {
+      final id = row['id'];
+      if (id == null) continue;
+      final localId = int.parse(id.toString());
+      if (!remoteIds.contains(localId)) toDelete.add(localId);
+    }
+    if (toDelete.isEmpty) return;
+
+    for (var i = 0; i < toDelete.length; i += 100) {
+      final end = (i + 100 < toDelete.length) ? i + 100 : toDelete.length;
+      final chunk = toDelete.sublist(i, end);
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      await db.delete(
+        table,
+        where: 'id IN ($placeholders)',
+        whereArgs: chunk,
+      );
+    }
+  }
+
+  Future<void> _clearLocalTables({bool restoreForeignKeys = true}) async {
     final db = await _databaseHelper.database;
     await db.execute('PRAGMA foreign_keys = OFF');
     try {
@@ -295,13 +576,35 @@ class SyncService {
         }
       });
     } finally {
-      await db.execute('PRAGMA foreign_keys = ON');
+      if (restoreForeignKeys) {
+        await db.execute('PRAGMA foreign_keys = ON');
+      }
     }
+  }
+
+  Future<bool> _localTableExists(String table) async {
+    final db = await _databaseHelper.database;
+    final rows = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+      [table],
+    );
+    return rows.isNotEmpty;
+  }
+
+  Future<Set<String>> _localColumnNames(String table) async {
+    final db = await _databaseHelper.database;
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    return {
+      for (final col in info)
+        if (col['name'] != null) col['name'] as String,
+    };
   }
 
   Future<int> _pullTable(String table, {bool clearFirst = true}) async {
     final client = _supabase.client!;
     final db = await _databaseHelper.database;
+    final localColumns = await _localColumnNames(table);
+    if (localColumns.isEmpty) return 0;
 
     final allRows = <Map<String, dynamic>>[];
     var from = 0;
@@ -331,23 +634,43 @@ class SyncService {
       }
     }
 
+    var inserted = 0;
     await db.transaction((txn) async {
       if (clearFirst) {
         await txn.delete(table);
       }
       for (final raw in allRows) {
         final row = _normalizeRowForLocal(raw);
+        row.removeWhere((key, _) => !localColumns.contains(key));
+        if (row.isEmpty) continue;
+
         if (table == 'store_settings') {
           final key = row['setting_key'] as String?;
           if (key != null && localOnlySettingKeys.contains(key)) {
             continue;
           }
         }
-        await txn.insert(
-          table,
-          row,
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+
+        try {
+          await txn.insert(
+            table,
+            row,
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+          inserted++;
+        } catch (e) {
+          // Soft-pull unique conflicts: replace by deleting matching name then insert.
+          if (table == 'product_brands' || table == 'product_categories') {
+            final name = row['name'];
+            if (name != null) {
+              await txn.delete(table, where: 'name = ?', whereArgs: [name]);
+              await txn.insert(table, row);
+              inserted++;
+              continue;
+            }
+          }
+          rethrow;
+        }
       }
 
       if (table == 'store_settings' && preserve != null) {
@@ -371,7 +694,8 @@ class SyncService {
       }
     });
 
-    return allRows.length;
+    debugPrint('pulled $table: $inserted / ${allRows.length} rows');
+    return inserted;
   }
 
   Map<String, dynamic> _normalizeRowForRemote(Map<String, Object?> row) {
@@ -385,6 +709,11 @@ class SyncService {
         out[key] = value;
       }
     });
+    // Also drop empty image_url strings so they never wipe cloud photos.
+    final imageUrl = out['image_url'];
+    if (imageUrl == null || (imageUrl is String && imageUrl.trim().isEmpty)) {
+      out.remove('image_url');
+    }
     return out;
   }
 

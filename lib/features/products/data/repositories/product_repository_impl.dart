@@ -14,6 +14,43 @@ class ProductRepositoryImpl implements ProductRepository {
 
   ProductRepositoryImpl(this._databaseHelper);
 
+  (String? where, List<Object?> args) _buildProductFilter({
+    String? query,
+    String? brand,
+    String? category,
+    bool lowStockOnly = false,
+  }) {
+    final clauses = <String>[];
+    final args = <Object?>[];
+
+    final q = query?.trim() ?? '';
+    if (q.isNotEmpty) {
+      clauses.add(
+        '(name LIKE ? OR barcode LIKE ? OR note LIKE ? OR brand LIKE ? OR category LIKE ?)',
+      );
+      args.addAll(List.filled(5, '%$q%'));
+    }
+
+    final brandFilter = brand?.trim();
+    if (brandFilter != null && brandFilter.isNotEmpty) {
+      clauses.add('brand = ?');
+      args.add(brandFilter);
+    }
+
+    final categoryFilter = category?.trim();
+    if (categoryFilter != null && categoryFilter.isNotEmpty) {
+      clauses.add('category = ?');
+      args.add(categoryFilter);
+    }
+
+    if (lowStockOnly) {
+      clauses.add('quantity <= min_stock');
+    }
+
+    if (clauses.isEmpty) return (null, const []);
+    return (clauses.join(' AND '), args);
+  }
+
   @override
   Future<List<Product>> getAllProducts() async {
     // Check cache first
@@ -30,10 +67,18 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
-  Future<List<Product>> getProductsPaginated({int limit = 50, int offset = 0}) async {
+  Future<List<Product>> getProductsPaginated({
+    int limit = 50,
+    int offset = 0,
+    String? brand,
+    String? category,
+  }) async {
     final db = await _databaseHelper.database;
+    final filter = _buildProductFilter(brand: brand, category: category);
     final result = await db.query(
       'products',
+      where: filter.$1,
+      whereArgs: filter.$2,
       orderBy: 'name ASC',
       limit: limit,
       offset: offset,
@@ -42,9 +87,17 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
-  Future<int> getProductsCount() async {
+  Future<int> getProductsCount({String? brand, String? category}) async {
     final db = await _databaseHelper.database;
-    final result = await db.rawQuery('SELECT COUNT(*) as count FROM products');
+    final filter = _buildProductFilter(brand: brand, category: category);
+    if (filter.$1 == null) {
+      final result = await db.rawQuery('SELECT COUNT(*) as count FROM products');
+      return result.first['count'] as int;
+    }
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM products WHERE ${filter.$1}',
+      filter.$2,
+    );
     return result.first['count'] as int;
   }
 
@@ -87,12 +140,17 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
-  Future<List<Product>> searchProducts(String query) async {
+  Future<List<Product>> searchProducts(
+    String query, {
+    String? brand,
+    String? category,
+  }) async {
     final db = await _databaseHelper.database;
+    final filter = _buildProductFilter(query: query, brand: brand, category: category);
     final result = await db.query(
       'products',
-      where: 'name LIKE ? OR barcode LIKE ? OR note LIKE ?',
-      whereArgs: ['%$query%', '%$query%', '%$query%'],
+      where: filter.$1,
+      whereArgs: filter.$2,
       orderBy: 'name ASC',
       limit: 100,
     );
@@ -100,12 +158,19 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
-  Future<List<Product>> searchProductsPaginated(String query, {int limit = 50, int offset = 0}) async {
+  Future<List<Product>> searchProductsPaginated(
+    String query, {
+    int limit = 50,
+    int offset = 0,
+    String? brand,
+    String? category,
+  }) async {
     final db = await _databaseHelper.database;
+    final filter = _buildProductFilter(query: query, brand: brand, category: category);
     final result = await db.query(
       'products',
-      where: 'name LIKE ? OR barcode LIKE ? OR note LIKE ?',
-      whereArgs: ['%$query%', '%$query%', '%$query%'],
+      where: filter.$1,
+      whereArgs: filter.$2,
       orderBy: 'name ASC',
       limit: limit,
       offset: offset,
@@ -114,19 +179,93 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
-  Future<List<Product>> getLowStockProducts() async {
-    // Check cache first
-    final cached = _cache.get<List<Product>>(CacheKeys.lowStockProducts);
-    if (cached != null) return cached;
-    
+  Future<List<String>> getBrands() async {
     final db = await _databaseHelper.database;
-    final result = await db.rawQuery(
-      'SELECT * FROM products WHERE quantity <= min_stock ORDER BY quantity ASC',
+    final result = await db.query(
+      'product_brands',
+      columns: ['name'],
+      orderBy: 'name COLLATE NOCASE ASC',
+    );
+    return result.map((row) => row['name'] as String).toList();
+  }
+
+  @override
+  Future<int> addBrand(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return 0;
+    final db = await _databaseHelper.database;
+    try {
+      return await db.insert('product_brands', {'name': trimmed});
+    } on DatabaseException catch (e) {
+      if (e.isUniqueConstraintError()) return 0;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<int> deleteBrand(String name) async {
+    final db = await _databaseHelper.database;
+    return db.delete('product_brands', where: 'name = ?', whereArgs: [name]);
+  }
+
+  @override
+  Future<List<String>> getCategories() async {
+    final db = await _databaseHelper.database;
+    final result = await db.query(
+      'product_categories',
+      columns: ['name'],
+      orderBy: 'name COLLATE NOCASE ASC',
+    );
+    return result.map((row) => row['name'] as String).toList();
+  }
+
+  @override
+  Future<int> addCategory(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return 0;
+    final db = await _databaseHelper.database;
+    try {
+      return await db.insert('product_categories', {'name': trimmed});
+    } on DatabaseException catch (e) {
+      if (e.isUniqueConstraintError()) return 0;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<int> deleteCategory(String name) async {
+    final db = await _databaseHelper.database;
+    return db.delete('product_categories', where: 'name = ?', whereArgs: [name]);
+  }
+
+  @override
+  Future<List<Product>> getLowStockProducts({String? brand, String? category}) async {
+    final hasFilters =
+        (brand != null && brand.trim().isNotEmpty) ||
+        (category != null && category.trim().isNotEmpty);
+
+    if (!hasFilters) {
+      final cached = _cache.get<List<Product>>(CacheKeys.lowStockProducts);
+      if (cached != null) return cached;
+    }
+
+    final db = await _databaseHelper.database;
+    final filter = _buildProductFilter(
+      brand: brand,
+      category: category,
+      lowStockOnly: true,
+    );
+    final result = await db.query(
+      'products',
+      where: filter.$1,
+      whereArgs: filter.$2,
+      orderBy: 'quantity ASC',
     );
     final products = result.map((map) => Product.fromMap(map)).toList();
-    
-    // Cache for 2 minutes
-    _cache.set(CacheKeys.lowStockProducts, products, duration: const Duration(minutes: 2));
+
+    if (!hasFilters) {
+      _cache.set(CacheKeys.lowStockProducts, products, duration: const Duration(minutes: 2));
+    }
     return products;
   }
 

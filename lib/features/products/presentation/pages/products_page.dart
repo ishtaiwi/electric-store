@@ -10,6 +10,7 @@ import '../../domain/entities/product.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../bloc/product_bloc.dart';
 import '../widgets/product_form_dialog.dart';
+import '../widgets/product_taxonomy_dialog.dart';
 import '../widgets/stock_adjustment_dialog.dart';
 
 class ProductsPage extends StatefulWidget {
@@ -24,6 +25,10 @@ class _ProductsPageState extends State<ProductsPage> {
   final _searchFocusNode = FocusNode();
   Timer? _debounceTimer;
   bool _showLowStock = false;
+  String? _brandFilter;
+  String? _categoryFilter;
+  List<String> _brands = [];
+  List<String> _categories = [];
 
   @override
   void initState() {
@@ -31,6 +36,46 @@ class _ProductsPageState extends State<ProductsPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _searchFocusNode.requestFocus();
     });
+    _loadTaxonomy();
+  }
+
+  Future<void> _loadTaxonomy() async {
+    try {
+      final repo = di.sl<ProductRepository>();
+      final results = await Future.wait([
+        repo.getBrands(),
+        repo.getCategories(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _brands = results[0];
+        _categories = results[1];
+      });
+    } catch (_) {}
+  }
+
+  void _reloadProducts() {
+    if (_showLowStock) {
+      context.read<ProductBloc>().add(ProductLoadLowStock(
+            brand: _brandFilter,
+            category: _categoryFilter,
+          ));
+      return;
+    }
+    final query = _searchController.text.trim();
+    if (query.isEmpty) {
+      context.read<ProductBloc>().add(ProductLoadAll(
+            brand: _brandFilter,
+            category: _categoryFilter,
+            force: true,
+          ));
+    } else {
+      context.read<ProductBloc>().add(ProductSearch(
+            query,
+            brand: _brandFilter,
+            category: _categoryFilter,
+          ));
+    }
   }
 
   @override
@@ -44,13 +89,21 @@ class _ProductsPageState extends State<ProductsPage> {
   void _onSearchChanged(String value) {
     _debounceTimer?.cancel();
     if (value.isEmpty) {
-      context.read<ProductBloc>().add(ProductLoadAll());
+      context.read<ProductBloc>().add(ProductLoadAll(
+            brand: _brandFilter,
+            category: _categoryFilter,
+            force: true,
+          ));
       setState(() {});
       return;
     }
     _debounceTimer = Timer(const Duration(milliseconds: 300), () {
       if (mounted) {
-        context.read<ProductBloc>().add(ProductSearch(value));
+        context.read<ProductBloc>().add(ProductSearch(
+              value,
+              brand: _brandFilter,
+              category: _categoryFilter,
+            ));
       }
     });
     setState(() {});
@@ -64,7 +117,11 @@ class _ProductsPageState extends State<ProductsPage> {
     if (!mounted) return;
     if (product != null) {
       _searchController.clear();
-      context.read<ProductBloc>().add(ProductLoadAll());
+      context.read<ProductBloc>().add(ProductLoadAll(
+            brand: _brandFilter,
+            category: _categoryFilter,
+            force: true,
+          ));
       setState(() {});
       _showProductDialog(product: product);
     } else {
@@ -187,10 +244,29 @@ class _ProductsPageState extends State<ProductsPage> {
                               ),
                         ),
                       ),
-                      ElevatedButton.icon(
-                        onPressed: () => _showProductDialog(),
-                        icon: const Icon(Icons.add),
-                        label: isNarrow ? const SizedBox.shrink() : Text(LocalizationService().get('addProduct')),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              await showDialog(
+                                context: context,
+                                builder: (_) => const ProductTaxonomyDialog(),
+                              );
+                              await _loadTaxonomy();
+                            },
+                            icon: const Icon(Icons.category_outlined),
+                            label: isNarrow
+                                ? const SizedBox.shrink()
+                                : Text(LocalizationService().get('manageBrandsCategories')),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: () => _showProductDialog(),
+                            icon: const Icon(Icons.add),
+                            label: isNarrow ? const SizedBox.shrink() : Text(LocalizationService().get('addProduct')),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -227,7 +303,11 @@ class _ProductsPageState extends State<ProductsPage> {
                                       onPressed: () {
                                         _debounceTimer?.cancel();
                                         _searchController.clear();
-                                        context.read<ProductBloc>().add(ProductLoadAll());
+                                        context.read<ProductBloc>().add(ProductLoadAll(
+                                              brand: _brandFilter,
+                                              category: _categoryFilter,
+                                              force: true,
+                                            ));
                                         setState(() {});
                                       },
                                     ),
@@ -261,25 +341,83 @@ class _ProductsPageState extends State<ProductsPage> {
                         selected: _showLowStock,
                         onSelected: (selected) {
                           setState(() => _showLowStock = selected);
-                          if (selected) {
-                            context.read<ProductBloc>().add(ProductLoadLowStock());
-                          } else {
-                            context.read<ProductBloc>().add(ProductLoadAll());
-                          }
+                          _reloadProducts();
                         },
                         selectedColor: AppColors.warning.withOpacity(0.2),
                         checkmarkColor: AppColors.warning,
                       ),
 
+                      // Brand / النوع
+                      SizedBox(
+                        width: isNarrow ? 150 : 180,
+                        child: DropdownButtonFormField<String?>(
+                          value: (_brandFilter != null && _brands.contains(_brandFilter))
+                              ? _brandFilter
+                              : null,
+                          isDense: true,
+                          decoration: InputDecoration(
+                            labelText: LocalizationService().get('brand'),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                          items: [
+                            DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text(LocalizationService().get('allBrands')),
+                            ),
+                            ..._brands.map(
+                              (b) => DropdownMenuItem<String?>(value: b, child: Text(b)),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setState(() => _brandFilter = value);
+                            _reloadProducts();
+                          },
+                        ),
+                      ),
+
+                      // Category / الصنف
+                      SizedBox(
+                        width: isNarrow ? 150 : 180,
+                        child: DropdownButtonFormField<String?>(
+                          value: (_categoryFilter != null && _categories.contains(_categoryFilter))
+                              ? _categoryFilter
+                              : null,
+                          isDense: true,
+                          decoration: InputDecoration(
+                            labelText: LocalizationService().get('productCategory'),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                          items: [
+                            DropdownMenuItem<String?>(
+                              value: null,
+                              child: Text(LocalizationService().get('allProductCategories')),
+                            ),
+                            ..._categories.map(
+                              (c) => DropdownMenuItem<String?>(value: c, child: Text(c)),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setState(() => _categoryFilter = value);
+                            _reloadProducts();
+                          },
+                        ),
+                      ),
+
                       // Refresh
                       IconButton(
                         icon: const Icon(Icons.refresh),
-                        onPressed: () {
+                        onPressed: () async {
                           _searchController.clear();
                           setState(() {
                             _showLowStock = false;
+                            _brandFilter = null;
+                            _categoryFilter = null;
                           });
-                          context.read<ProductBloc>().add(ProductRefresh());
+                          await _loadTaxonomy();
+                          if (!mounted) return;
+                          context.read<ProductBloc>().add(const ProductRefresh());
                         },
                         tooltip: LocalizationService().get('refresh'),
                       ),
@@ -354,6 +492,10 @@ class _ProductsPageState extends State<ProductsPage> {
                             DataColumn(label: Text(l10n.get('name'), style: const TextStyle(fontWeight: FontWeight.bold))),
                             DataColumn(label: Text(l10n.get('barcode'), style: const TextStyle(fontWeight: FontWeight.bold))),
                             if (!isCompact)
+                              DataColumn(label: Text(l10n.get('brand'), style: const TextStyle(fontWeight: FontWeight.bold))),
+                            if (!isCompact)
+                              DataColumn(label: Text(l10n.get('productCategory'), style: const TextStyle(fontWeight: FontWeight.bold))),
+                            if (!isCompact)
                               DataColumn(label: Text(l10n.get('notes'), style: const TextStyle(fontWeight: FontWeight.bold))),
                             DataColumn(label: Text(l10n.get('price'), style: const TextStyle(fontWeight: FontWeight.bold)), numeric: true),
                             if (!isCompact)
@@ -401,6 +543,28 @@ class _ProductsPageState extends State<ProductsPage> {
                                     ),
                                   ),
                                 ),
+                                // Brand / النوع (hidden on compact)
+                                if (!isCompact)
+                                  DataCell(
+                                    Text(
+                                      product.brand ?? '-',
+                                      style: TextStyle(
+                                        color: isOutOfStock ? Colors.grey : Colors.grey[700],
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                // Category / الصنف (hidden on compact)
+                                if (!isCompact)
+                                  DataCell(
+                                    Text(
+                                      product.category ?? '-',
+                                      style: TextStyle(
+                                        color: isOutOfStock ? Colors.grey : Colors.grey[700],
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
                                 // Notes (hidden on compact)
                                 if (!isCompact)
                                   DataCell(
@@ -561,38 +725,56 @@ class _ProductsPageState extends State<ProductsPage> {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header skeleton
-            Container(
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            const SizedBox(height: 16),
-            // Row skeletons
-            ...List.generate(8, (index) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                children: [
-                  _buildSkeletonBox(width: 150, height: 20),
-                  const SizedBox(width: 16),
-                  _buildSkeletonBox(width: 100, height: 20),
-                  const SizedBox(width: 16),
-                  _buildSkeletonBox(width: 80, height: 20),
-                  const SizedBox(width: 16),
-                  _buildSkeletonBox(width: 60, height: 20),
-                  const SizedBox(width: 16),
-                  _buildSkeletonBox(width: 60, height: 20),
-                  const Spacer(),
-                  _buildSkeletonBox(width: 100, height: 30),
-                ],
-              ),
-            )),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Fit as many skeleton rows as the available height allows (avoid overflow).
+            const headerHeight = 40.0;
+            const headerGap = 16.0;
+            const rowHeight = 36.0; // ~20 content + 8*2 padding
+            final availableForRows =
+                (constraints.maxHeight - headerHeight - headerGap).clamp(0.0, double.infinity);
+            final rowCount = availableForRows > 0
+                ? (availableForRows / rowHeight).floor().clamp(1, 8)
+                : 1;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: headerHeight,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                const SizedBox(height: headerGap),
+                Expanded(
+                  child: ListView.builder(
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: rowCount,
+                    itemBuilder: (context, index) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          _buildSkeletonBox(width: 150, height: 20),
+                          const SizedBox(width: 16),
+                          _buildSkeletonBox(width: 100, height: 20),
+                          const SizedBox(width: 16),
+                          _buildSkeletonBox(width: 80, height: 20),
+                          const SizedBox(width: 16),
+                          _buildSkeletonBox(width: 60, height: 20),
+                          const SizedBox(width: 16),
+                          _buildSkeletonBox(width: 60, height: 20),
+                          const Spacer(),
+                          _buildSkeletonBox(width: 100, height: 30),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

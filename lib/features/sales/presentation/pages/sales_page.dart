@@ -28,6 +28,10 @@ class _SalesPageState extends State<SalesPage> {
   final _searchFocusNode = FocusNode();
   Timer? _debounceTimer;
   int _quantityToAdd = 1;
+  String? _brandFilter;
+  String? _categoryFilter;
+  List<String> _brands = [];
+  List<String> _categories = [];
 
   @override
   void initState() {
@@ -36,6 +40,30 @@ class _SalesPageState extends State<SalesPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _searchFocusNode.requestFocus();
     });
+    _loadTaxonomy();
+  }
+
+  Future<void> _loadTaxonomy() async {
+    try {
+      final repo = di.sl<ProductRepository>();
+      final results = await Future.wait([
+        repo.getBrands(),
+        repo.getCategories(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _brands = results[0];
+        _categories = results[1];
+      });
+    } catch (_) {}
+  }
+
+  void _applyProductQuery() {
+    context.read<SalesBloc>().add(SalesSearchProducts(
+          _searchController.text,
+          brand: _brandFilter,
+          category: _categoryFilter,
+        ));
   }
 
   @override
@@ -50,14 +78,14 @@ class _SalesPageState extends State<SalesPage> {
     _debounceTimer?.cancel();
     // If empty, refresh immediately (no delay)
     if (value.isEmpty) {
-      context.read<SalesBloc>().add(SalesSearchProducts(''));
+      _applyProductQuery();
       setState(() {});
       return;
     }
     // Debounce non-empty queries for 300ms
     _debounceTimer = Timer(const Duration(milliseconds: 300), () {
       if (mounted) {
-        context.read<SalesBloc>().add(SalesSearchProducts(value));
+        _applyProductQuery();
       }
     });
     setState(() {});
@@ -422,7 +450,7 @@ class _SalesPageState extends State<SalesPage> {
                                             onPressed: () {
                                               _debounceTimer?.cancel();
                                               _searchController.clear();
-                                              context.read<SalesBloc>().add(SalesSearchProducts(''));
+                                              _applyProductQuery();
                                               setState(() {});
                                             },
                                           ),
@@ -447,6 +475,69 @@ class _SalesPageState extends State<SalesPage> {
                                     _handleBarcodeInput(value);
                                   },
                                 ),
+                              ),
+                              const SizedBox(height: 12),
+                              // Brand / Category filters
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: DropdownButtonFormField<String?>(
+                                      value: (_brandFilter != null && _brands.contains(_brandFilter))
+                                          ? _brandFilter
+                                          : null,
+                                      isDense: true,
+                                      decoration: InputDecoration(
+                                        labelText: l10n.get('brand'),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                      ),
+                                      items: [
+                                        DropdownMenuItem<String?>(
+                                          value: null,
+                                          child: Text(l10n.get('allBrands')),
+                                        ),
+                                        ..._brands.map(
+                                          (b) => DropdownMenuItem<String?>(value: b, child: Text(b)),
+                                        ),
+                                      ],
+                                      onChanged: (value) {
+                                        setState(() => _brandFilter = value);
+                                        _applyProductQuery();
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: DropdownButtonFormField<String?>(
+                                      value: (_categoryFilter != null && _categories.contains(_categoryFilter))
+                                          ? _categoryFilter
+                                          : null,
+                                      isDense: true,
+                                      decoration: InputDecoration(
+                                        labelText: l10n.get('productCategory'),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                      ),
+                                      items: [
+                                        DropdownMenuItem<String?>(
+                                          value: null,
+                                          child: Text(l10n.get('allProductCategories')),
+                                        ),
+                                        ..._categories.map(
+                                          (c) => DropdownMenuItem<String?>(value: c, child: Text(c)),
+                                        ),
+                                      ],
+                                      onChanged: (value) {
+                                        setState(() => _categoryFilter = value);
+                                        _applyProductQuery();
+                                      },
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),

@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/services/localization_service.dart';
 import '../../../../core/services/sync_service.dart';
 import '../../../../core/supabase/supabase_client_service.dart';
+import '../../../../core/supabase/supabase_config.dart';
 import '../../../settings/domain/repositories/settings_repository.dart';
 import '../../../auth/domain/entities/user.dart';
 import '../../../auth/domain/repositories/auth_repository.dart';
@@ -27,8 +28,8 @@ class _SettingsPageState extends State<SettingsPage> {
   final _currencyController = TextEditingController();
   bool _isLoading = true;
   bool _isSaving = false;
-  bool _supabaseSyncEnabled = true;
-  bool _supabaseAutoSync = true;
+  bool _uploadMode = false;
+  bool _downloadMode = false;
   bool _isSyncing = false;
   String? _lastSyncAt;
   
@@ -58,13 +59,12 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _loadSupabaseSettings() async {
     try {
       final supabase = sl<SupabaseClientService>();
-      final enabled = await supabase.getSyncEnabled();
-      final auto = await supabase.getAutoSync();
+      final mode = await supabase.getSyncMode();
       final last = await supabase.getLastSyncAt();
       if (!mounted) return;
       setState(() {
-        _supabaseSyncEnabled = enabled;
-        _supabaseAutoSync = auto;
+        _uploadMode = mode == DesktopSyncMode.upload;
+        _downloadMode = mode == DesktopSyncMode.download;
         _lastSyncAt = last;
       });
     } catch (e) {
@@ -72,16 +72,17 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _saveSupabaseSettings() async {
+  DesktopSyncMode get _selectedMode {
+    if (_uploadMode) return DesktopSyncMode.upload;
+    if (_downloadMode) return DesktopSyncMode.download;
+    return DesktopSyncMode.off;
+  }
+
+  Future<void> _saveSupabaseSettings({bool showSnackBar = true}) async {
     final supabase = sl<SupabaseClientService>();
 
     try {
-      if (_supabaseSyncEnabled && !_supabaseAutoSync) {
-        setState(() => _supabaseAutoSync = true);
-      }
-
-      await supabase.setSyncEnabled(_supabaseSyncEnabled);
-      await supabase.setAutoSync(_supabaseAutoSync);
+      await supabase.setSyncMode(_selectedMode);
 
       final ok = await supabase.initializeFromSettings();
       if (!ok && mounted) {
@@ -94,15 +95,9 @@ class _SettingsPageState extends State<SettingsPage> {
         return;
       }
 
-      final sync = sl<SyncService>();
-      if (_supabaseSyncEnabled) {
-        sync.startPeriodicDesktopPush();
-        unawaited(sync.pushFromDesktop());
-      } else {
-        sync.stopPeriodicDesktopPush();
-      }
+      await sl<SyncService>().applySyncMode();
 
-      if (mounted) {
+      if (showSnackBar && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(LocalizationService().get('supabaseSettingsSaved')),
@@ -134,7 +129,7 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Text(LocalizationService().get('cancel')),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(LocalizationService().get('downloadFromCloud')),
           ),
@@ -143,6 +138,30 @@ class _SettingsPageState extends State<SettingsPage> {
     );
     if (ok == true) {
       await _runSync(SyncDirection.pull);
+    }
+  }
+
+  Future<void> _confirmPushToCloud() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(LocalizationService().get('uploadToCloudTitle')),
+        content: Text(LocalizationService().get('uploadToCloudWarning')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(LocalizationService().get('cancel')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(LocalizationService().get('uploadToCloud')),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await _runSync(SyncDirection.push);
     }
   }
 
@@ -167,8 +186,22 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _runSync(SyncDirection direction) async {
     setState(() => _isSyncing = true);
     try {
-      await _saveSupabaseSettings();
-      final result = await sl<SyncService>().sync(direction: direction);
+      final ready = await sl<SupabaseClientService>().initializeFromSettings();
+      if (!ready) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(LocalizationService().get('supabaseInitFailed')),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+
+      final sync = sl<SyncService>();
+      final result = direction == SyncDirection.push
+          ? await sync.uploadNow()
+          : await sync.downloadNow();
       final last = await sl<SupabaseClientService>().getLastSyncAt();
       if (!mounted) return;
       setState(() => _lastSyncAt = last);
@@ -748,24 +781,42 @@ class _SettingsPageState extends State<SettingsPage> {
                                   color: Colors.grey[600],
                                 ),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 12),
                               SwitchListTile(
                                 contentPadding: EdgeInsets.zero,
-                                title: Text(LocalizationService().get('enableSupabaseSync')),
-                                value: _supabaseSyncEnabled,
-                                onChanged: (v) => setState(() => _supabaseSyncEnabled = v),
+                                title: Text(LocalizationService().get('enableUploadMode')),
+                                subtitle: Text(
+                                  LocalizationService().get('enableUploadModeDesc'),
+                                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                                ),
+                                value: _uploadMode,
+                                onChanged: _isSyncing
+                                    ? null
+                                    : (v) async {
+                                        setState(() {
+                                          _uploadMode = v;
+                                          if (v) _downloadMode = false;
+                                        });
+                                        await _saveSupabaseSettings();
+                                      },
                               ),
                               SwitchListTile(
                                 contentPadding: EdgeInsets.zero,
-                                title: Text(LocalizationService().get('autoSyncOnStartup')),
+                                title: Text(LocalizationService().get('enableDownloadMode')),
                                 subtitle: Text(
-                                  LocalizationService().get('autoSyncOnStartupDesc'),
+                                  LocalizationService().get('enableDownloadModeDesc'),
                                   style: TextStyle(color: Colors.grey[600], fontSize: 12),
                                 ),
-                                value: _supabaseAutoSync,
-                                onChanged: _supabaseSyncEnabled
-                                    ? (v) => setState(() => _supabaseAutoSync = v)
-                                    : null,
+                                value: _downloadMode,
+                                onChanged: _isSyncing
+                                    ? null
+                                    : (v) async {
+                                        setState(() {
+                                          _downloadMode = v;
+                                          if (v) _uploadMode = false;
+                                        });
+                                        await _saveSupabaseSettings();
+                                      },
                               ),
                               if (_lastSyncAt != null && _lastSyncAt!.isNotEmpty) ...[
                                 const SizedBox(height: 4),
@@ -775,12 +826,49 @@ class _SettingsPageState extends State<SettingsPage> {
                                 ),
                               ],
                               const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: _isSyncing ? null : _confirmPushToCloud,
+                                      icon: _isSyncing
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white,
+                                              ),
+                                            )
+                                          : const Icon(Icons.cloud_upload),
+                                      label: Text(LocalizationService().get('uploadToCloud')),
+                                      style: ElevatedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(vertical: 14),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: _isSyncing ? null : _confirmPullFromCloud,
+                                      icon: const Icon(Icons.cloud_download),
+                                      label: Text(LocalizationService().get('downloadFromCloud')),
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(vertical: 14),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
                               Wrap(
                                 spacing: 8,
                                 runSpacing: 8,
                                 children: [
                                   OutlinedButton.icon(
-                                    onPressed: _isSyncing ? null : _saveSupabaseSettings,
+                                    onPressed: _isSyncing
+                                        ? null
+                                        : () => _saveSupabaseSettings(),
                                     icon: const Icon(Icons.save),
                                     label: Text(LocalizationService().get('saveSupabaseSettings')),
                                   ),
@@ -788,24 +876,6 @@ class _SettingsPageState extends State<SettingsPage> {
                                     onPressed: _isSyncing ? null : _testSupabaseConnection,
                                     icon: const Icon(Icons.wifi_tethering),
                                     label: Text(LocalizationService().get('testConnection')),
-                                  ),
-                                  ElevatedButton.icon(
-                                    onPressed: _isSyncing
-                                        ? null
-                                        : () => _runSync(SyncDirection.push),
-                                    icon: _isSyncing
-                                        ? const SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: CircularProgressIndicator(strokeWidth: 2),
-                                          )
-                                        : const Icon(Icons.cloud_upload),
-                                    label: Text(LocalizationService().get('syncNow')),
-                                  ),
-                                  TextButton.icon(
-                                    onPressed: _isSyncing ? null : _confirmPullFromCloud,
-                                    icon: const Icon(Icons.cloud_download),
-                                    label: Text(LocalizationService().get('downloadFromCloud')),
                                   ),
                                 ],
                               ),

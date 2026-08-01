@@ -225,6 +225,8 @@ class TestDatabaseGenerator {
         price REAL NOT NULL DEFAULT 0,
         cost_price REAL NOT NULL DEFAULT 0,
         note TEXT,
+        brand TEXT,
+        category TEXT,
         supplier TEXT,
         min_stock INTEGER DEFAULT 5,
         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP

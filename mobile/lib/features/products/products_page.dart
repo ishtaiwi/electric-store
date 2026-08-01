@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/helpers.dart';
@@ -30,10 +31,14 @@ class _ProductsPageState extends State<ProductsPage>
   Timer? _debounce;
 
   final List<Product> _items = [];
+  List<String> _brands = [];
+  List<String> _categories = [];
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = false;
   bool _lowStockOnly = false;
+  String? _brandFilter;
+  String? _categoryFilter;
   String? _error;
 
   /// Guards against a slow response from an outdated search overwriting
@@ -47,6 +52,7 @@ class _ProductsPageState extends State<ProductsPage>
   void initState() {
     super.initState();
     _scrollCtrl.addListener(_onScroll);
+    _loadTaxonomy();
     _loadFirstPage();
   }
 
@@ -57,6 +63,22 @@ class _ProductsPageState extends State<ProductsPage>
     _searchCtrl.dispose();
     _searchFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadTaxonomy() async {
+    try {
+      final results = await Future.wait([
+        widget.repository.getBrands(),
+        widget.repository.getCategories(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _brands = results[0];
+        _categories = results[1];
+      });
+    } catch (_) {
+      // Filters stay empty; products list still works.
+    }
   }
 
   void _onScroll() {
@@ -85,6 +107,8 @@ class _ProductsPageState extends State<ProductsPage>
       final page = await widget.repository.fetchPage(
         query: _searchCtrl.text,
         lowStockOnly: _lowStockOnly,
+        brand: _brandFilter,
+        category: _categoryFilter,
       );
       if (!mounted || requestId != _requestId) return;
       setState(() {
@@ -112,6 +136,8 @@ class _ProductsPageState extends State<ProductsPage>
       final page = await widget.repository.fetchPage(
         query: _searchCtrl.text,
         lowStockOnly: _lowStockOnly,
+        brand: _brandFilter,
+        category: _categoryFilter,
         offset: _items.length,
       );
       if (!mounted || requestId != _requestId) return;
@@ -129,17 +155,79 @@ class _ProductsPageState extends State<ProductsPage>
     }
   }
 
-  Future<void> _refresh() {
+  Future<void> _refresh() async {
     widget.repository.invalidateCache();
+    await _loadTaxonomy();
     return _loadFirstPage();
   }
 
+  bool get _hasActiveFilters =>
+      _lowStockOnly ||
+      (_brandFilter != null && _brandFilter!.isNotEmpty) ||
+      (_categoryFilter != null && _categoryFilter!.isNotEmpty);
+
+  void _clearFilters() {
+    setState(() {
+      _lowStockOnly = false;
+      _brandFilter = null;
+      _categoryFilter = null;
+    });
+    _loadFirstPage();
+  }
+
   Future<void> _openDetails(Product product) async {
-    await showModalBottomSheet<void>(
+    final updated = await showModalBottomSheet<Product>(
       context: context,
       isScrollControlled: true,
       useSafeArea: false,
-      builder: (_) => ProductDetailsSheet(product: product),
+      builder: (_) => ProductDetailsSheet(
+        product: product,
+        repository: widget.repository,
+      ),
+    );
+    if (updated != null && mounted) {
+      final index = _items.indexWhere((p) => p.id == updated.id);
+      if (index >= 0) {
+        setState(() => _items[index] = updated);
+      }
+    }
+  }
+
+  Widget _filterDropdown({
+    required String label,
+    required String? value,
+    required List<String> options,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Expanded(
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String?>(
+            isExpanded: true,
+            value: (value != null && options.contains(value)) ? value : null,
+            hint: const Text('الكل', style: TextStyle(fontSize: 13)),
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text('الكل', style: TextStyle(fontSize: 13)),
+              ),
+              ...options.map(
+                (o) => DropdownMenuItem<String?>(
+                  value: o,
+                  child: Text(o, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                ),
+              ),
+            ],
+            onChanged: onChanged,
+          ),
+        ),
+      ),
     );
   }
 
@@ -178,6 +266,32 @@ class _ProductsPageState extends State<ProductsPage>
             ),
           ),
           Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Row(
+              children: [
+                _filterDropdown(
+                  label: 'النوع',
+                  value: _brandFilter,
+                  options: _brands,
+                  onChanged: (v) {
+                    setState(() => _brandFilter = v);
+                    _loadFirstPage();
+                  },
+                ),
+                const SizedBox(width: 8),
+                _filterDropdown(
+                  label: 'الصنف',
+                  value: _categoryFilter,
+                  options: _categories,
+                  onChanged: (v) {
+                    setState(() => _categoryFilter = v);
+                    _loadFirstPage();
+                  },
+                ),
+              ],
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
@@ -189,6 +303,13 @@ class _ProductsPageState extends State<ProductsPage>
                     _loadFirstPage();
                   },
                 ),
+                if (_hasActiveFilters) ...[
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: _clearFilters,
+                    child: const Text('مسح الفلاتر'),
+                  ),
+                ],
                 const Spacer(),
                 Text(
                   '${_items.length}${_hasMore ? '+' : ''} منتج',
@@ -230,7 +351,7 @@ class _ProductsPageState extends State<ProductsPage>
     if (_items.isEmpty) {
       return Center(
         child: Text(
-          _searchCtrl.text.trim().isNotEmpty
+          _searchCtrl.text.trim().isNotEmpty || _hasActiveFilters
               ? 'لا توجد نتائج للبحث'
               : 'لا توجد منتجات',
         ),
@@ -268,36 +389,26 @@ class _ProductTile extends StatelessWidget {
     return Card(
       child: ListTile(
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        leading: CircleAvatar(
-          backgroundColor: p.isOutOfStock
-              ? AppColors.error
-              : p.isLowStock
-                  ? AppColors.warning
-                  : AppColors.primaryLight,
-          child: Icon(
-            p.isOutOfStock ? Icons.remove_shopping_cart : Icons.inventory_2,
-            color: Colors.white,
-            size: 20,
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            width: 72,
+            height: 72,
+            child: p.hasImage
+                ? Image.network(
+                    p.imageUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _stockAvatar(p),
+                  )
+                : _stockAvatar(p),
           ),
         ),
         title: Text(
           p.name,
-          maxLines: 1,
+          maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          [
-            if (p.barcode != null && p.barcode!.isNotEmpty)
-              'باركد: ${p.barcode}',
-            'كمية: ${p.quantity}',
-            if (p.isLowStock) 'ناقص',
-          ].join(' · '),
-          style: TextStyle(
-            color: p.isLowStock ? AppColors.error : AppColors.textSecondary,
-            fontSize: 12,
-          ),
         ),
         trailing: Text(
           Formatters.money(p.price),
@@ -310,14 +421,51 @@ class _ProductTile extends StatelessWidget {
       ),
     );
   }
+
+  Widget _stockAvatar(Product p) {
+    return ColoredBox(
+      color: p.isOutOfStock
+          ? AppColors.error
+          : p.isLowStock
+              ? AppColors.warning
+              : AppColors.primaryLight,
+      child: Icon(
+        p.isOutOfStock ? Icons.remove_shopping_cart : Icons.inventory_2,
+        color: Colors.white,
+        size: 32,
+      ),
+    );
+  }
 }
 
 
-/// Read-only product details — no create/edit on mobile.
-class ProductDetailsSheet extends StatelessWidget {
-  const ProductDetailsSheet({super.key, required this.product});
+/// Product details with optional photo upload to Supabase Storage.
+class ProductDetailsSheet extends StatefulWidget {
+  const ProductDetailsSheet({
+    super.key,
+    required this.product,
+    required this.repository,
+  });
 
   final Product product;
+  final ProductRepository repository;
+
+  @override
+  State<ProductDetailsSheet> createState() => _ProductDetailsSheetState();
+}
+
+class _ProductDetailsSheetState extends State<ProductDetailsSheet> {
+  late Product _product;
+  bool _uploading = false;
+  String? _status;
+
+  final _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _product = widget.product;
+  }
 
   Widget _row(String label, String value) {
     return Padding(
@@ -345,9 +493,98 @@ class ProductDetailsSheet extends StatelessWidget {
     );
   }
 
+  Future<void> _pickAndUpload(ImageSource source) async {
+    if (_product.id == null) return;
+    try {
+      final picked = await _picker.pickImage(
+        source: source,
+        maxWidth: 1280,
+        maxHeight: 1280,
+        imageQuality: 82,
+      );
+      if (picked == null || !mounted) return;
+
+      setState(() {
+        _uploading = true;
+        _status = 'جاري رفع الصورة...';
+      });
+
+      final updated = await widget.repository.uploadProductImage(
+        productId: _product.id!,
+        filePath: picked.path,
+        mimeType: picked.mimeType,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _product = updated;
+        _uploading = false;
+        _status = 'تم حفظ الصورة';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _uploading = false;
+        _status = e.toString();
+      });
+    }
+  }
+
+  Future<void> _showImageSourceSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera),
+              title: const Text('التقاط صورة'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickAndUpload(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('اختيار من المعرض'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickAndUpload(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _removeImage() async {
+    if (_product.id == null) return;
+    setState(() {
+      _uploading = true;
+      _status = 'جاري حذف الصورة...';
+    });
+    try {
+      final updated = await widget.repository.clearProductImage(_product.id!);
+      if (!mounted) return;
+      setState(() {
+        _product = updated;
+        _uploading = false;
+        _status = 'تم حذف الصورة';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _uploading = false;
+        _status = e.toString();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final maxHeight = MediaQuery.sizeOf(context).height * 0.85;
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.9;
 
     return SafeArea(
       maintainBottomViewPadding: true,
@@ -366,18 +603,88 @@ class ProductDetailsSheet extends StatelessWidget {
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
-              _row('اسم المنتج', product.name),
-              _row('الباركود', product.barcode ?? ''),
-              _row('الكمية', '${product.quantity}'),
-              _row('حد التنبيه', '${product.minStock}'),
-              _row('سعر البيع', Formatters.money(product.price)),
-              _row('سعر التكلفة', Formatters.money(product.costPrice)),
-              if (product.supplier != null && product.supplier!.isNotEmpty)
-                _row('المورد', product.supplier!),
-              _row('ملاحظة', product.note ?? ''),
+              Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: SizedBox(
+                    width: 180,
+                    height: 180,
+                    child: _product.hasImage
+                        ? Image.network(
+                            _product.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const ColoredBox(
+                              color: Color(0xFFE8EEF5),
+                              child: Icon(Icons.broken_image, size: 48),
+                            ),
+                          )
+                        : const ColoredBox(
+                            color: Color(0xFFE8EEF5),
+                            child: Icon(
+                              Icons.add_a_photo_outlined,
+                              size: 48,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (_uploading)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              if (_status != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    _status!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _status!.startsWith('تم')
+                          ? AppColors.success
+                          : (_uploading
+                              ? AppColors.textSecondary
+                              : AppColors.error),
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _uploading ? null : _showImageSourceSheet,
+                      icon: const Icon(Icons.add_a_photo),
+                      label: Text(_product.hasImage ? 'تغيير الصورة' : 'إضافة صورة'),
+                    ),
+                  ),
+                  if (_product.hasImage) ...[
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: _uploading ? null : _removeImage,
+                      tooltip: 'حذف الصورة',
+                      icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 16),
+              _row('اسم المنتج', _product.name),
+              _row('الباركود', _product.barcode ?? ''),
+              _row('النوع', _product.brand ?? ''),
+              _row('الصنف', _product.category ?? ''),
+              _row('الكمية', '${_product.quantity}'),
+              _row('حد التنبيه', '${_product.minStock}'),
+              _row('سعر البيع', Formatters.money(_product.price)),
+              _row('سعر التكلفة', Formatters.money(_product.costPrice)),
+              if (_product.supplier != null && _product.supplier!.isNotEmpty)
+                _row('المورد', _product.supplier!),
+              _row('ملاحظة', _product.note ?? ''),
               const SizedBox(height: 8),
               OutlinedButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(context, _product),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
                 ),

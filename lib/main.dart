@@ -81,8 +81,8 @@ void _prewarmDatabase() {
   });
 }
 
-/// Auto-upload: desktop is source of truth.
-/// Credentials are embedded from `.env` (gitignored); never entered in the UI.
+/// Apply saved sync mode: upload / download / off (default).
+/// Modes stay as the user left them until changed in Settings.
 void _maybeAutoSync() {
   Future(() async {
     try {
@@ -95,16 +95,12 @@ void _maybeAutoSync() {
         return;
       }
 
-      await supabase.setSyncEnabled(true);
-      await supabase.setAutoSync(true);
+      // Ensure a persisted mode exists (defaults to off).
+      final settingsMode = await supabase.getSyncMode();
+      await supabase.setSyncMode(settingsMode);
 
-      sync.startPeriodicDesktopPush(
-        interval: const Duration(minutes: 5),
-      );
-
-      debugPrint('Auto-upload desktop → Supabase starting...');
-      final result = await sync.pushFromDesktop();
-      debugPrint('Auto-upload: ${result.message}');
+      debugPrint('Desktop sync mode: $settingsMode');
+      await sync.applySyncMode();
     } catch (e) {
       debugPrint('Auto-sync skipped: $e');
     }

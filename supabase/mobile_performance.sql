@@ -17,6 +17,8 @@ CREATE INDEX IF NOT EXISTS idx_products_search_trgm
             COALESCE(name, '') || ' ' ||
             COALESCE(barcode, '') || ' ' ||
             COALESCE(note, '') || ' ' ||
+            COALESCE(brand, '') || ' ' ||
+            COALESCE(category, '') || ' ' ||
             COALESCE(supplier, '')
         ) gin_trgm_ops
     );
@@ -47,15 +49,20 @@ SELECT
     p.price,
     p.cost_price,
     p.note,
+    p.brand,
+    p.category,
     p.supplier,
     p.supplier_id,
     p.min_stock,
+    p.image_url,
     p.last_updated,
     (p.quantity <= COALESCE(p.min_stock, 5)) AS is_low_stock,
     lower(
         COALESCE(p.name, '') || ' ' ||
         COALESCE(p.barcode, '') || ' ' ||
         COALESCE(p.note, '') || ' ' ||
+        COALESCE(p.brand, '') || ' ' ||
+        COALESCE(p.category, '') || ' ' ||
         COALESCE(p.supplier, '')
     ) AS search_text
 FROM products p;

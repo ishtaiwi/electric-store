@@ -57,49 +57,57 @@ class DatabaseHelper {
     // Determine which database file name to use
     final dbFileName = useTestDatabase ? testDbName : 'd.db';
     
-    // Fast path: Check common locations first
+    // Resolve paths (installer-safe: never hardcode a developer machine path)
     final exeDir = File(Platform.resolvedExecutable).parent.path;
     final exeDbPath = join(exeDir, dbFileName);
     final cwdDbPath = join(Directory.current.path, dbFileName);
-    final projectDbPath = 'c:\\Users\\osama\\Desktop\\electricalStore\\$dbFileName';
+
+    final directory = await getApplicationDocumentsDirectory();
+    final documentsDir = Directory(join(directory.path, 'electrical_store'));
+    if (!await documentsDir.exists()) {
+      await documentsDir.create(recursive: true);
+    }
+    final documentsDbPath = join(documentsDir.path, dbFileName);
     
     // Check paths in parallel for faster startup
     final pathChecks = await Future.wait([
       customDbPath != null ? File(customDbPath!).exists() : Future.value(false),
       File(exeDbPath).exists(),
       File(cwdDbPath).exists(),
-      File(projectDbPath).exists(),
+      File(documentsDbPath).exists(),
     ]);
     
     if (customDbPath != null && pathChecks[0]) {
+      // Explicit override
       path = customDbPath!;
     } else if (pathChecks[1]) {
+      // Portable: d.db next to the .exe
       path = exeDbPath;
-    } else if (pathChecks[2]) {
+    } else if (pathChecks[2] && !_isInstalledExeDir(exeDir)) {
+      // Dev / flutter run: d.db in the project working directory
       path = cwdDbPath;
-    } else if (pathChecks[3]) {
-      path = projectDbPath;
     } else {
-      // Fall back to documents directory with new database
-      final directory = await getApplicationDocumentsDirectory();
-      path = join(directory.path, 'electrical_store', dbFileName);
-      
-      // Ensure directory exists
-      final dbDir = Directory(dirname(path));
-      if (!await dbDir.exists()) {
-        await dbDir.create(recursive: true);
-      }
+      // Installed app default: Documents\electrical_store\d.db
+      path = documentsDbPath;
     }
 
     final dbExists = await File(path).exists();
     
     return await openDatabase(
       path,
-      version: 14,
+      version: 17,
       onCreate: dbExists ? null : _onCreate,
       onUpgrade: _onUpgrade,
       onConfigure: _onConfigure,
     );
+  }
+
+  /// True when the exe lives under Program Files / Local AppData Programs (Inno installs).
+  static bool _isInstalledExeDir(String exeDir) {
+    final lower = exeDir.toLowerCase();
+    return lower.contains('\\program files') ||
+        lower.contains('\\local\\programs\\') ||
+        lower.contains('\\appdata\\local\\programs\\');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -301,6 +309,55 @@ class DatabaseHelper {
     if (oldVersion < 14) {
       await _createScalabilityIndexes(db);
     }
+    // Migration: v14 -> v15: Add brand (النوع) and category (الصنف) to products
+    if (oldVersion < 15) {
+      final productInfo = await db.rawQuery('PRAGMA table_info(products)');
+      final hasBrand = productInfo.any((col) => col['name'] == 'brand');
+      if (!hasBrand) {
+        await db.execute('ALTER TABLE products ADD COLUMN brand TEXT');
+      }
+      final hasCategory = productInfo.any((col) => col['name'] == 'category');
+      if (!hasCategory) {
+        await db.execute('ALTER TABLE products ADD COLUMN category TEXT');
+      }
+      try {
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_products_brand ON products(brand)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_products_category ON products(category)');
+      } catch (_) {}
+    }
+    // Migration: v15 -> v16: Master lists for brands and categories
+    if (oldVersion < 16) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS product_brands (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS product_categories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE
+        )
+      ''');
+      await db.execute('''
+        INSERT OR IGNORE INTO product_brands (name)
+        SELECT DISTINCT TRIM(brand) FROM products
+        WHERE brand IS NOT NULL AND TRIM(brand) != ''
+      ''');
+      await db.execute('''
+        INSERT OR IGNORE INTO product_categories (name)
+        SELECT DISTINCT TRIM(category) FROM products
+        WHERE category IS NOT NULL AND TRIM(category) != ''
+      ''');
+    }
+    // Migration: v16 -> v17: Product image URL (Supabase Storage)
+    if (oldVersion < 17) {
+      final productInfo = await db.rawQuery('PRAGMA table_info(products)');
+      final hasImageUrl = productInfo.any((col) => col['name'] == 'image_url');
+      if (!hasImageUrl) {
+        await db.execute('ALTER TABLE products ADD COLUMN image_url TEXT');
+      }
+    }
   }
 
   Future<void> _createScalabilityIndexes(Database db) async {
@@ -458,10 +515,27 @@ class DatabaseHelper {
         price REAL NOT NULL DEFAULT 0,
         cost_price REAL NOT NULL DEFAULT 0,
         note TEXT,
+        brand TEXT,
+        category TEXT,
         supplier TEXT,
         supplier_id INTEGER REFERENCES suppliers(id),
         min_stock INTEGER DEFAULT 5,
+        image_url TEXT,
         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
+    // Product brand / category master lists (النوع / الصنف)
+    await db.execute('''
+      CREATE TABLE product_brands (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE product_categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE
       )
     ''');
 
@@ -663,6 +737,8 @@ class DatabaseHelper {
     // Create core indexes
     await db.execute('CREATE INDEX idx_products_barcode ON products(barcode)');
     await db.execute('CREATE INDEX idx_products_name ON products(name)');
+    await db.execute('CREATE INDEX idx_products_brand ON products(brand)');
+    await db.execute('CREATE INDEX idx_products_category ON products(category)');
     await db.execute('CREATE INDEX idx_sales_date ON sales(sale_date)');
     await db.execute('CREATE INDEX idx_sales_barcode ON sales(barcode)');
     await db.execute('CREATE INDEX idx_customers_phone ON customers(phone)');
@@ -773,9 +849,11 @@ class DatabaseHelper {
     useTestDatabase = false;
   }
   
-  /// Check if test database exists in the project directory
+  /// Check if test database exists next to the project / cwd.
   static Future<bool> testDatabaseExists() async {
-    const projectDbPath = 'c:\\Users\\osama\\Desktop\\electricalStore\\$testDbName';
-    return await File(projectDbPath).exists();
+    final cwdPath = join(Directory.current.path, testDbName);
+    if (await File(cwdPath).exists()) return true;
+    final exePath = join(File(Platform.resolvedExecutable).parent.path, testDbName);
+    return File(exePath).exists();
   }
 }

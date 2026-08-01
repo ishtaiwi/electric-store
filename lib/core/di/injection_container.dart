@@ -60,11 +60,11 @@ Future<void> init() async {
   sl.registerLazySingleton(() => SupabaseClientService(sl()));
   sl.registerLazySingleton(() => SyncService(sl(), sl()));
 
-  // Any local DB write → automatic debounced upload to Supabase
+  // Any local DB write → auto sync when this PC is in upload mode
   final dbHelper = sl<DatabaseHelper>();
   final syncService = sl<SyncService>();
   dbHelper.onDataChanged = () {
-    syncService.scheduleDesktopPush();
+    syncService.scheduleAutoSync();
   };
 
   // AI Services - Smart Search and Chatbot
