@@ -1,159 +1,156 @@
-# Electrical Store — ملخص المشروع الكامل
+# Electrical Store
 
-> نظام إدارة متجر أدوات ومستلزمات كهربائية  
-> **الحزمة:** `electrical_store` · **الإصدار:** `1.0.0+1` · **الناشر:** Osama  
-> **المنصات:** Windows Desktop (أساسي) + تطبيق موبايل Android/iOS عبر Supabase
+Point-of-sale and inventory management system for electrical tools and supplies.
 
----
-
-## 1. نظرة عامة
-
-**Electrical Store** تطبيق Flutter لإدارة محل كهربائيات بشكل متكامل:
-
-| الطبقة | الدور |
-|--------|--------|
-| **ديسكتوب Windows** | العمل اليومي أوفلاين على SQLite (`d.db`) — نقطة البيع، المخزون، الفواتير، العملاء، الموردين |
-| **Supabase (PostgreSQL + Storage)** | نسخة سحابية للمزامنة بين الأجهزة وللموبايل |
-| **تطبيق الموبايل** | قراءة/تعديل منتجات وعملاء من السحابة + فواتير تجريب خاصة بالموبايل |
-
-الفكرة: جهاز ديسكتوب **رئيسي** يرفع البيانات، وجهاز ديسكتوب **ثانوي** يسحبها، والموبايل يشتغل على السحابة بدون نسخ بيانات التجريب إلى الديسكتوب.
+| | |
+|---|---|
+| **Package** | `electrical_store` |
+| **Version** | `1.0.0+1` |
+| **Platforms** | Windows desktop (primary) · Android / iOS companion app |
+| **Architecture** | Offline-first SQLite on desktop · Supabase for cloud sync and mobile |
 
 ---
 
-## 2. ماذا يضم البرنامج؟
+## Overview
 
-| المجال | التفاصيل |
-|--------|----------|
-| نقطة البيع (POS) | بيع فوري، باركود، سلة، خصم، نقد/بطاقة/جزئي/آجل |
-| المخزون | منتجات، كميات، تكلفة وبيع، نوع/صنف، صور، تنبيهات نقص |
-| العملاء | أرصدة، كشف حساب، دفعات وشيكات |
-| الفواتير والمبيعات | سجل، حالات دفع، طباعة PDF |
-| الموردين | فواتير، دفعات، مرفقات |
-| المصروفات وقوائم الأسعار | تسجيل وتصنيف + عروض أسعار PDF |
-| التقارير | مبيعات، أرباح، مخزون، ديون، أفضل منتجات |
-| النسخ الاحتياطي | Backup / Restore لـ SQLite |
-| الإعدادات | بيانات المحل، لغة، مستخدمين، مزامنة Supabase |
-| المساعد الذكي + البحث الذكي | Chatbot محلي وبحث تقريبي عربي |
+Electrical Store is a Flutter application designed for day-to-day shop operations: sales, stock, customers, invoices, suppliers, expenses, reporting, and backups.
 
-العملة الافتراضية: **شيكل (ILS)** · اللغات: **عربي / إنجليزي (RTL)**.
+The system is split into three layers:
+
+| Layer | Responsibility |
+|-------|----------------|
+| **Windows desktop** | Primary workstation. Runs offline against local SQLite (`d.db`). |
+| **Supabase** | Cloud mirror (PostgreSQL + Storage) used for multi-PC sync and the mobile app. |
+| **Mobile app** | Lightweight client on Supabase for products, customers, and trial invoices. |
+
+**Recommended multi-device setup:** one desktop acts as the **uploader** (source of truth); a second desktop **downloads** from the cloud; mobile reads and writes shared cloud data while keeping trial sales isolated from desktop operations.
 
 ---
 
-## 3. شاشات الديسكتوب
+## Features
 
-شريط جانبي (NavigationRail) مع تبويبات:
+### Desktop
 
-1. لوحة التحكم
-2. المبيعات (POS)
-3. كل المبيعات
-4. المنتجات
-5. العملاء
-6. الفواتير
-7. المصروفات
-8. الموردين
-9. قوائم الأسعار
-10. النسخ الاحتياطي
-11. الإعدادات
+- **Point of sale** — barcode entry, cart, discounts, cash / card / partial / credit payment
+- **Inventory** — products with cost and sell price, brands and categories, images, low-stock alerts, stock adjustments
+- **Customers** — balances, ledger, cash and cheque payments
+- **Invoices & sales history** — payment status, PDF print and export
+- **Suppliers** — invoices, payments, file attachments
+- **Expenses & price lists** — categorized expenses and printable price quotes
+- **Reports** — sales, profit, stock, receivables, top products
+- **Backup & restore** — full database backup and recovery
+- **Settings** — store profile, language (Arabic / English, RTL), user management, cloud sync modes
+- **Assistants** — local chatbot and fuzzy Arabic product search
 
-شاشات إضافية: تسجيل الدخول، كشف حساب العميل، تقرير ربح الكشف.
+Currency defaults to **ILS (₪)**.
 
-### أدوار المستخدمين
+### Mobile (`mobile/`)
 
-- Admin / Manager / Cashier
-- كلمات المرور: SHA-256 + Salt (مع ترحيل تلقائي من النص الصريح القديم)
-- مستخدمون افتراضيون للتطوير: `admin/admin123`, `manager/manager123`, `cashier1/cashier123`
+- Authentication against the shared `users` table
+- Product browsing and editing, including image upload to Storage
+- Customers, account statements, and payments
+- Trial invoices that do not affect desktop stock or balances
 
----
+### Roles
 
-## 4. الميزات بالتفصيل (ديسكتوب)
+| Role | Typical access |
+|------|----------------|
+| Admin | Full access, user management |
+| Manager | Operational management |
+| Cashier | Sales-focused access |
 
-### 4.1 المنتجات والمخزون
-
-- CRUD كامل، بحث، فلتر مخزون منخفض، تعديل مخزون (إدخال/إخراج/إرجاع)
-- حقول: اسم، باركود، كمية، سعر بيع/تكلفة، ملاحظات، مورد، حد أدنى، صورة (`image_url`)، نوع (brand)، صنف (category)
-- جداول مساعدة: `product_brands`, `product_categories`
-- ترقيم صفحات + كاش وإبطال عند التعديل
-
-### 4.2 نقطة البيع والمبيعات
-
-- باركود، بحث ذكي، سلة، خصم، عميل أو بيع عابر
-- دفع: نقد / بطاقة / جزئي / آجل
-- معاملة واحدة: فاتورة + بنود + تحديث مخزون
-- إلغاء بيع يعيد المخزون
-
-### 4.3 العملاء والفواتير والموردين
-
-- كشف حساب محاسبي (مدين/دائن)، دفعات نقد/شيك/خصم
-- فواتير بحالات دفع وطباعة PDF
-- موردين: فواتير، دفعات، مرفقات PDF/صور
-
-### 4.4 التقارير والنسخ الاحتياطي
-
-- مبيعات يومية، أرباح، مخزون، ديون، أفضل منتجات، اتجاه شهري
-- Backup ZIP واستعادة من ملف `.db`
-
-### 4.5 البنية التحتية
-
-- Audit logging، Caching، Validation، Security، Error handling موحّد
-- Clean Architecture خفيفة (feature-first) + BLoC + GetIt
+Passwords are stored with SHA-256 hashing and salt. Legacy plaintext passwords are migrated automatically on login.
 
 ---
 
-## 5. مزامنة Supabase — أجهزة متعددة
+## Cloud sync (multi-desktop)
 
-### 5.1 الأوضاع (من شاشة الإعدادات)
+Sync behaviour is configured in **Settings**. Both modes start **off** and persist until changed.
 
-الوضعين **مطفأين افتراضياً** ويُحفظ اختيارك حتى تغيّره:
+| Mode | Intended device | Behaviour |
+|------|-----------------|-----------|
+| **Upload** | Primary desktop | Pushes local changes to Supabase automatically (on write + periodic) |
+| **Download** | Secondary desktop | Pulls cloud changes automatically (realtime + periodic); full pull on enable |
+| **Off** | Any device | No automatic sync |
 
-| الوضع | الجهاز | السلوك |
-|--------|--------|--------|
-| **وضع الرفع (Upload)** | الديسكتوب الرئيسي | رفع تلقائي عند أي تعديل محلي + رفع دوري |
-| **وضع السحب (Download)** | الديسكتوب الثاني | سحب تلقائي عند تغيّر السحابة (Realtime + دوري) + سحب كامل عند التفعيل |
-| **إيقاف** | أي جهاز | لا مزامنة تلقائية |
+Manual actions remain available at any time:
 
-أزرار يدوية دائماً متاحة:
+- **Upload data to Supabase**
+- **Download data from Supabase** (replaces local desktop tables with the cloud copy)
 
-- رفع البيانات لـ Supabase
-- سحب البيانات من Supabase (يستبدل البيانات المحلية بنسخة السحابة لكل جداول الديسكتوب)
+Do not enable Upload on more than one desktop. The secondary machine should use Download only.
 
-مهم: لا تشغّل وضع الرفع على جهازين معاً. الجهاز الثاني = سحب فقط.
-
-### 5.2 الجداول التي تُزامَن (ديسكتوب ↔ سحابة)
+### Synced tables
 
 `users`, `suppliers`, `customers`, `product_brands`, `product_categories`, `products`, `invoices`, `sales`, `customer_payments`, `discounts`, `inventory_adjustments`, `cancelled_sales`, `expenses`, `additional_income`, `budget`, `store_settings`, `price_lists`, `price_list_items`, `supplier_attachments`, `supplier_invoices`, `supplier_payments`
 
-### 5.3 بيانات الموبايل فقط
+### Mobile-only data
 
-- `mobile_trial_invoices` / `mobile_trial_sales` — فواتير تجريب بدون تأثير على المخزون/الأرصدة
-- Views للأداء: `mobile_products`, `mobile_customer_balances`
+- `mobile_trial_invoices` / `mobile_trial_sales` — trial sales without stock or balance impact
+- Performance views such as `mobile_products` and `mobile_customer_balances`
 
-### 5.4 صور المنتجات
+### Product images
 
-- تُرفع من الموبايل إلى Supabase Storage (bucket: `product-images`)
-- رابط الصورة يُحفظ في `products.image_url`
-- المزامنة لا تحذف ملفات التخزين
-- عند الرفع من الديسكتوب: إذا ما في صورة محلية، يُحافظ على `image_url` الموجود في السحابة
+- Uploaded from mobile into the `product-images` Storage bucket
+- Public URL stored on `products.image_url`
+- Sync never deletes Storage objects
+- Desktop upload preserves an existing cloud `image_url` when the local row has no image
 
-### 5.5 إعدادات المزامنة المحلية فقط
-
-لا تُستبدل عند السحب: مفاتيح الاتصال، وضع المزامنة، آخر مزامنة.
+Device-local sync preferences (mode, last sync timestamp) are preserved across downloads.
 
 ---
 
-## 6. تطبيق الموبايل (`mobile/`)
+## Getting started
 
-- يعتمد على Supabase مباشرة (ليس SQLite المحلي)
-- تسجيل دخول بنفس جدول `users`
-- منتجات: عرض/تعديل + رفع صور
-- عملاء وكشف حساب ودفعات
-- فواتير تجريب معزولة عن ديسكتوب
+### Prerequisites
 
-### تشغيل الموبايل على Android
+- Flutter SDK (Dart 3+)
+- Windows 10+ for the desktop app
+- A [Supabase](https://supabase.com) project
+- Python 3.10+ (optional, for one-time SQLite → Supabase migration)
+- Android Studio / Xcode when building the mobile app
 
-1. ثبّت Android Studio + SDK
-2. نفّذ `flutter doctor` ووافق التراخيص
-3. فعّل USB debugging على الجهاز
-4. من جذر المشروع:
+### Configure secrets
+
+1. Copy `.env.example` to `.env` and set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and (for migration scripts only) `SUPABASE_SERVICE_ROLE_KEY`.
+2. Generate embedded secret files used by the apps:
+
+```powershell
+python supabase/generate_secrets.py
+```
+
+This creates gitignored `supabase_secrets.dart` files for desktop and mobile.
+
+### Apply database schema
+
+In the Supabase SQL Editor, run as needed:
+
+| Script | Purpose |
+|--------|---------|
+| `supabase/schema.sql` | Core tables and RLS |
+| `supabase/add_product_brand_category.sql` | Brand / category tables and view updates |
+| `supabase/add_product_images.sql` | `image_url` column and Storage bucket |
+| `supabase/mobile_trial_invoices.sql` | Mobile trial invoice tables |
+| `supabase/mobile_performance.sql` | Mobile performance views and indexes |
+
+### Optional initial data migration
+
+```powershell
+cd supabase
+pip install -r requirements.txt
+python migrate_from_sqlite.py --db ..\d.db
+```
+
+### Run desktop
+
+```powershell
+flutter pub get
+flutter run -d windows
+```
+
+On the primary PC, enable **Upload** in Settings. On a secondary PC, enable **Download** (or run a manual download once).
+
+### Run mobile
 
 ```powershell
 python supabase/generate_secrets.py
@@ -162,125 +159,67 @@ flutter pub get
 flutter run
 ```
 
----
-
-## 7. إعداد Supabase (مرة واحدة)
-
-### المتطلبات
-
-- حساب https://supabase.com
-- Python 3.10+ (لسكربتات النقل)
-- Flutter SDK
-- ملف `d.db` على الجهاز الرئيسي
-
-### الخطوات
-
-1. أنشئ مشروع Supabase وانسخ Project URL + anon key (+ service_role للسكربتات فقط).
-2. ضع القيم في `.env` بجذر المشروع (من `.env.example`) — لا ترفع `.env` على Git.
-3. ولّد الأسرار المضمّنة محلياً:
-
-```powershell
-python supabase/generate_secrets.py
-```
-
-ينشئ `lib/core/config/supabase_secrets.dart` وملف الموبايل المقابل (مُتجاهَلان في Git).
-
-4. في SQL Editor شغّل حسب الحاجة:
-
-| الملف | الغرض |
-|--------|--------|
-| `supabase/schema.sql` | الجداول الأساسية + RLS |
-| `supabase/add_product_brand_category.sql` | نوع/صنف المنتجات + تحديث الـ views |
-| `supabase/add_product_images.sql` | عمود الصورة + bucket التخزين |
-| `supabase/mobile_trial_invoices.sql` | فواتير تجريب الموبايل |
-| `supabase/mobile_performance.sql` | views/فهارس أداء الموبايل |
-
-5. نقل أولي اختياري من SQLite:
-
-```powershell
-cd supabase
-pip install -r requirements.txt
-python migrate_from_sqlite.py --db ..\d.db
-```
-
-6. على الديسكتوب الرئيسي: فعّل وضع الرفع من الإعدادات.  
-   على الديسكتوب الثاني: فعّل وضع السحب أو اضغط سحب يدوي مرة.
-
----
-
-## 8. التقنيات
-
-| التقنية | الاستخدام |
-|---------|-----------|
-| Flutter / Dart 3+ | الواجهة والمنطق |
-| flutter_bloc + GetIt + equatable | حالة وحقن اعتماديات |
-| sqflite + FFI | SQLite على Windows |
-| supabase_flutter | مزامنة سحابية + موبايل + Storage |
-| pdf / printing | فواتير وكشوف |
-| file_picker / archive | ملفات ونسخ احتياطي |
-| crypto / uuid | أمان وأرقام فواتير |
-| Inno Setup (`installer.iss`) | مثبت Windows |
-
----
-
-## 9. بنية المجلدات
-
-```
-electricalStore/
-├── lib/                 # تطبيق الديسكتوب
-│   ├── main.dart
-│   ├── core/
-│   │   ├── config/      # supabase_secrets (محلي فقط)
-│   │   ├── database/    # SQLite
-│   │   ├── di/
-│   │   ├── services/    # sync_service, localization, pdf
-│   │   └── supabase/    # إعدادات وجداول المزامنة
-│   └── features/        # auth, products, sales, customers, ...
-├── mobile/              # تطبيق الموبايل
-├── supabase/            # schema + سكربتات SQL/Python
-├── windows/             # بناء Windows
-├── installer.iss
-├── build_installer.ps1
-├── .env.example
-└── README.md            # هذا الملف (التوثيق الوحيد للمشروع)
-```
-
-تدفق الديسكتوب: تسجيل دخول → DashboardPage → تبويبات عبر IndexedStack.
-
----
-
-## 10. التوزيع (Windows)
+### Windows release build
 
 ```powershell
 flutter build windows --release
 .\build_installer.ps1
 ```
 
-المخرجات المحلية (لا تُرفع عادة على Git): `build/`, `installer_output/*.exe`.
+The installer is defined in `installer.iss` (Inno Setup).
 
 ---
 
-## 11. أمان وملاحظات مهمة
+## Tech stack
 
-- لا ترفع `.env` ولا `supabase_secrets.dart` ولا `service_role` ولا ملفات `*.db`.
-- سياسات RLS الحالية تسمح لدور anon بالوصول الداخلي للمحل — لا تنشر المفاتيح علناً.
-- الجهاز الرئيسي وحده يرفع؛ الجهاز الثاني يسحب فقط حتى لا يمسح الـ prune بيانات السحابة.
-- صور المنتجات تبقى في Storage حتى لو تغيّرت الصفوف محلياً بدون رابط صورة.
-
----
-
-## 12. ملخص ما تم إنجازه في المشروع
-
-1. نظام ديسكتوب كامل لإدارة المحل (POS، مخزون، عملاء، فواتير، موردين، تقارير، Backup).
-2. تعريب عربي/إنجليزي وعملة شيكل.
-3. ربط هجين مع Supabase: رفع/سحب مع أوضاع واضحة لأجهزة متعددة.
-4. تطبيق موبايل على نفس السحابة مع فواتير تجريب معزولة.
-5. صور منتجات عبر Storage مع حماية الرابط أثناء المزامنة.
-6. نوع وصنف للمنتجات (جداول + واجهات ديسكتوب/موبايل).
-7. سكربتات SQL/Python للإعداد والترحيل، وأسرار محلية عبر `.env`.
-8. مثبت Windows عبر Inno Setup.
-9. توحيد التوثيق في هذا الملف الواحد وحذف ملفات `.md` المكررة والملفات المؤقتة الزائدة.
+| Area | Technology |
+|------|------------|
+| UI & app | Flutter, Dart 3+ |
+| State & DI | flutter_bloc, GetIt, equatable |
+| Local database | sqflite + FFI (Windows) |
+| Cloud | supabase_flutter (Postgres, Realtime, Storage) |
+| Documents | pdf, printing |
+| Files | file_picker, archive |
+| Security | crypto, salted password hashing |
+| Packaging | Inno Setup |
 
 ---
 
-آخر تحديث للتوثيق: آب 2026
+## Project structure
+
+```
+electricalStore/
+├── lib/                  # Windows desktop application
+│   ├── main.dart
+│   ├── core/
+│   │   ├── config/       # Generated secrets (local)
+│   │   ├── database/     # SQLite access
+│   │   ├── di/           # Dependency injection
+│   │   ├── services/     # Sync, localization, PDF, search, chatbot
+│   │   └── supabase/     # Sync table list and client helpers
+│   └── features/         # auth, products, sales, customers, ...
+├── mobile/               # Companion mobile application
+├── supabase/             # Schema, migrations, Python utilities
+├── windows/              # Windows runner and build files
+├── installer.iss         # Inno Setup script
+├── build_installer.ps1
+├── .env.example
+└── README.md
+```
+
+Desktop flow: login → `DashboardPage` → feature tabs via `IndexedStack`.
+
+---
+
+## Security
+
+- Keep `.env`, generated `supabase_secrets.dart`, and the service-role key out of version control.
+- Treat the anon key as an internal shop credential; do not publish it publicly.
+- Enable Upload on a single primary desktop only, so prune/upload cannot wipe cloud data from a secondary machine.
+- Product image files remain in Storage even when desktop rows temporarily lack an `image_url`.
+
+---
+
+## License
+
+Private project. All rights reserved.
